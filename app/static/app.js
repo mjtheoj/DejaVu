@@ -177,6 +177,7 @@ function setReportMode(type) {
     showToast("Switched report type. The previous draft was cleared to avoid mixing Lost and Found details.", false);
   }
   $("#reportType").value = type;
+  $("#reportTypeChooser").classList.add("hidden");
   $("#reportForm").classList.remove("hidden");
   $$("[data-report-kind]").forEach((button) => {
     button.classList.toggle("selected", button.dataset.reportKind === type);
@@ -214,6 +215,7 @@ function setReportMode(type) {
 function resetReportMode() {
   $("#reportForm").reset();
   $("#reportForm").classList.add("hidden");
+  $("#reportTypeChooser").classList.remove("hidden");
   $("#reportType").value = "";
   $("#reportError").textContent = "";
   $("#imageLabel").textContent = "Choose a photo";
@@ -553,6 +555,9 @@ function showClaimDialog(report) {
   $("#claimItemSummary").innerHTML = "<strong>" + escapeHTML(report.title) + " · " + escapeHTML(report.public_ref) +
     "</strong><small>" + escapeHTML(categoryLabel(report.category)) + " · " + escapeHTML(report.location) + "</small>";
   $("#claimEvidence").value = "";
+  $$('input[name="claimEvidenceType"]').forEach((input) => { input.checked = false; });
+  $("#claimEvidenceImage").value = "";
+  $("#claimEvidenceImageLabel").textContent = "Attach one supporting photo (optional)";
   const preferredLostReportId = selectedLostReportForMatchId;
   selectedLostReportForMatchId = null;
   $("#claimSubmitButton").disabled = true;
