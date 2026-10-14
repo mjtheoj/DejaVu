@@ -4,7 +4,7 @@ This guide contains the setup, run, demo and test commands. Use a local developm
 
 ## Prerequisites
 
-- Python 3.10 or later (the CI workflow uses Python 3.11).
+- Python 3.10 or later. **Python 3.12 is recommended on Windows** for the current dependency set; CI is tested with Python 3.11. Avoid creating the environment with an experimental/new Python version if a dependency has no compatible wheel.
 - Git.
 - A terminal: PowerShell on Windows, or a shell on macOS/Linux.
 - Node.js is only needed to run the frontend JavaScript syntax check locally.
@@ -25,7 +25,7 @@ If the repository is already on your machine, open a terminal in the repository 
 ### Windows PowerShell
 
 ```powershell
-py -m venv .venv
+py -3.12 -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -36,7 +36,7 @@ Copy-Item .env.example .env
 If PowerShell activation is restricted by your device policy, use Command Prompt instead:
 
 ```bat
-py -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 pip install -r requirements.txt
