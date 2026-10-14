@@ -37,7 +37,7 @@ Student-facing search does not expose private Tag IDs, storage locations, privat
 - **Match notifications:** notifications for possible matches can open the match list for the associated lost report, so users do not have to search from scratch.
 - **Structured claim proof:** claimants select one or more evidence categories (distinctive features, purchase/receipt, packaging/accessory, date/location context, device/account context or other verifiable evidence), enter a private explanation and may attach one private supporting image.
 - **Image reuse checks:** the backend compares exact image hashes and perceptual fingerprints against images already stored on reports or claims. Exact duplicates and visually near-identical images are rejected. The check is a deterrent, not a guarantee against transformed images or screenshots.
-- **Parallel jury demo:** [`scripts/run-jury-demo.ps1`](scripts/run-jury-demo.ps1) starts student and office sessions on different local ports/hostnames. Both processes share the same local SQLite database while browser session cookies remain separate.
+- **Evaluation demo:** [`scripts/run-jury-demo.ps1`](scripts/run-jury-demo.ps1) starts one local server; the in-app role switcher changes between student and office views against the same SQLite database.
 
 ## Campus Sync integration direction
 
@@ -68,24 +68,12 @@ SQLite and local file storage are suitable for prototype evaluation, not a claim
 - [Campus operations and integration](CAMPUS_OPERATIONS.md) — item custody, Tag ID returns, staff procedure and Campus Sync integration prerequisites.
 
 
-## Jury demo: student and office portals side by side
-
-After installing dependencies in `.venv`, run this from the repository root in PowerShell:
+## Evaluation demo: one terminal and one shared session
 
 ```powershell
 .\scripts\run-jury-demo.ps1
 ```
 
-The script opens two local instances backed by the same demo SQLite database: the student portal at `http://localhost:8000` and the office portal at `http://127.0.0.1:8001`. The distinct hostnames keep the browser's session cookies separate while both portals see the same reports and claim workflow. Keep both terminal windows open. Stop each server with `Ctrl+C`.
+The recommended demo starts one server in the current terminal and opens `http://127.0.0.1:8000`. It uses `data/lostlink.db` for student and office operations. Use the header's **Switch to office** / **Switch to student** button to change roles in the same browser session; revisit the target tab after switching to fetch the latest records. Stop older two-portal servers before launch and stop the demo with `Ctrl+C`.
 
 Demo-only accounts:
-
-| Role | Email | Password |
-|---|---|---|
-| Student 1 | `student@lostlink.local` | `student123` |
-| Student 2 | `student2@lostlink.local` | `student2123` |
-| Student 3 | `student3@lostlink.local` | `student3123` |
-| Student 4 | `student4@lostlink.local` | `student4123` |
-| Office | `office@lostlink.local` | `office123` |
-
-This is a local jury demonstration, not a production deployment. Do not expose the ports to the public internet. The prototype watermarks public photo previews and blocks exact/near-duplicate report/evidence images; browsers cannot be made completely incapable of saving or screenshotting displayed images.

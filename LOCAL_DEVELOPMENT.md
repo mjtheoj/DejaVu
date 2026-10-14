@@ -151,15 +151,17 @@ Stop the server first. Local SQLite and uploaded images live under `data/` by de
 This run guide starts the standalone prototype. It does not connect the application to Campus Sync, institutional single sign-on, a campus-owned production database or a live physical lost-property desk. Those require approval and integration details from the college/Campus Sync administrators.
 
 
-## 10. Jury demo with two independent portals
+## 10. Evaluation demo — one terminal, one server (recommended)
 
-Complete the virtual-environment setup above first, then run this from the repository root in PowerShell:
+Complete the setup above and make sure `.env` contains a non-placeholder `SESSION_SECRET`. Then run this once from the repository root in PowerShell:
 
 ```powershell
 .\scripts\run-jury-demo.ps1
 ```
 
-It opens a student session at `http://localhost:8000` and an office session at `http://127.0.0.1:8001`. Both use the same local SQLite database and upload folder, but the separate hostnames keep the session cookies isolated. Leave both PowerShell windows running during the presentation.
+This starts **one** Uvicorn server and opens **one** browser origin at `http://127.0.0.1:8000`. The app opens in the student demo view. Use the header's **Switch to office** and **Switch to student** buttons to change demo accounts in the same browser session. Every operation uses the same SQLite database at `data/lostlink.db`; switching roles does not create a second app process or database. After switching roles, open the relevant tab again to reload its records.
+
+Do not run the old two-portal flow at the same time. Stop any old Uvicorn terminals with `Ctrl+C`, then start this script once. Role switching is a demo convenience and is only enabled in demo mode.
 
 | Role | Email | Password |
 |---|---|---|

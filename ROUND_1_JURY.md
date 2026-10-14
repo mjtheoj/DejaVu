@@ -335,3 +335,14 @@ Search results and suggested matches expose a **View details** panel with item r
 For the live jury walk-through, run `.`scripts/run-jury-demo.ps1` in PowerShell after installing requirements in `.venv`. The script opens student and office sessions on separate loopback hostnames/ports while sharing one local SQLite database. Use a student account to report/claim, then refresh the office portal to demonstrate intake, claim review and handover. See `LOCAL_DEVELOPMENT.md` for the local accounts and setup steps.
 
 **Image protection limitation:** public photographs are watermarked in the student-facing preview and the interface suppresses ordinary right-click/drag saving. Web browsers cannot guarantee prevention of saving, screenshots or access through browser developer tools. The meaningful control for evidence reuse is server-side exact/perceptual duplicate checking, not the UI deterrent alone.
+
+
+## Final demo run mode (evaluation)
+
+Use one terminal and one browser origin to avoid confusion from separate role cookies:
+
+1. Stop all running LostLink servers with Ctrl+C.
+2. Run `scripts/run-jury-demo.ps1` once from PowerShell.
+3. Keep that terminal open and use `http://127.0.0.1:8000`.
+4. Use the in-app role switcher to move between student and office demo users. Both roles use `data/lostlink.db`; reopen the target tab after switching to fetch fresh records.
+5. After the final smoke test, freeze feature work before presentation day unless a blocking defect is found.
