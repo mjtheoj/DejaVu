@@ -322,3 +322,16 @@ A. It is a working prototype with automated workflow checks, not a production de
 LostLink is more than a place to post lost items. It connects digital discovery to physical custody, private verification, a traceable Tag ID and a recorded handover.
 
 **Make items easier to find, but make their release accountable.**
+
+
+## Updated interface and jury walkthrough
+
+The current UI begins with separate guided choices for **I lost something** and **I found something**. The selected path changes the item/date/location prompts and clearly explains that found-item records are not publicly searchable until office intake. Both paths use the same validated API and report schema, avoiding mismatched payloads.
+
+Ownership claims now combine a private explanation with selectable evidence categories (distinctive features, purchase/receipt proof, accessories/packaging, date/location context, device/account context, or other verifiable proof). A claimant may attach one private evidence image. The API rejects an exact duplicate or a visually near-identical photo already used on a report or another claim. The office claim card shows the selected proof categories and a role-protected watermarked preview.
+
+Search results and suggested matches expose a **View details** panel with item reference, category, status, location, approximate date, brand/colour, visible characteristics, and (for match suggestions) the matching explanation signals. A match notification offers **View match details**, which opens the matching results for the related lost report. A match remains a lead, not proof of ownership.
+
+For the live jury walk-through, run `.`scripts/run-jury-demo.ps1` in PowerShell after installing requirements in `.venv`. The script opens student and office sessions on separate loopback hostnames/ports while sharing one local SQLite database. Use a student account to report/claim, then refresh the office portal to demonstrate intake, claim review and handover. See `LOCAL_DEVELOPMENT.md` for the local accounts and setup steps.
+
+**Image protection limitation:** public photographs are watermarked in the student-facing preview and the interface suppresses ordinary right-click/drag saving. Web browsers cannot guarantee prevention of saving, screenshots or access through browser developer tools. The meaningful control for evidence reuse is server-side exact/perceptual duplicate checking, not the UI deterrent alone.
