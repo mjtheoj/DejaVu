@@ -92,7 +92,7 @@ Office staff can approve, reject, request more evidence or mark a claim disputed
 
 After approval, the claim enters **Ready for physical handover**. Office staff retrieve the item from its recorded storage location, inspect the physical tag and enter the exact Tag ID. They confirm the claimant’s identity and that the item was actually handed over.
 
-A wrong tag, an unapproved claim, or a duplicate handover is rejected. A valid handover is recorded with item, tag, claimant, office operator and timestamp. The claim/report is marked **Returned**, relevant users are notified, and eligible verified-contribution points can be awarded.
+A wrong tag, an unapproved claim, or a duplicate handover is rejected. A valid handover is recorded with item, tag, claimant, office operator and timestamp. The claim/report is marked **Returned**, relevant users are notified, and eligible verified-contribution points can be awarded. Claimants can optionally link one of their own open lost reports; while a linked claim is active, the lost report cannot be closed manually. Successful physical handover closes the linked lost report automatically, preventing stale search activity.
 
 ```mermaid
 flowchart TD
