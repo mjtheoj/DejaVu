@@ -272,6 +272,58 @@ class LostLinkWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(repeated.status_code, 409)
 
+    def test_found_report_can_only_be_withdrawn_before_intake(self):
+        self.login("claimant@example.test", "claimant-password")
+        found_report = self.client.post(
+            "/api/reports",
+            json=self.report_body("found", "Green notebook", "Green ruled notebook with a black elastic band."),
+        )
+        self.assertEqual(found_report.status_code, 200, found_report.text)
+        found_report_id = found_report.json()["report"]["id"]
+        withdrawn = self.client.post(
+            f"/api/reports/{found_report_id}/close",
+            json={"reason": "found_report_withdrawn", "note": "Unable to bring the item in."},
+        )
+        self.assertEqual(withdrawn.status_code, 200, withdrawn.text)
+        self.assertEqual(withdrawn.json()["report"]["status"], "cancelled")
+        self.assertEqual(
+            self.client.post(
+                f"/api/reports/{found_report_id}/close",
+                json={"reason": "found_report_withdrawn"},
+            ).status_code,
+            409,
+        )
+
+        active_found = self.client.post(
+            "/api/reports",
+            json=self.report_body("found", "Black pen case", "Black pen case with three blue pens inside."),
+        )
+        self.assertEqual(active_found.status_code, 200, active_found.text)
+        active_id = active_found.json()["report"]["id"]
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        accepted = self.client.post(
+            f"/api/reports/{active_id}/intake",
+            json={
+                "confirmed_physical_receipt": True,
+                "storage_location": "Lost and Found Office - Shelf C3",
+                "private_detail": "A small scratch on the rear clasp.",
+                "value_band": "low",
+                "sensitivity_level": 1,
+            },
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.logout()
+
+        self.login("claimant@example.test", "claimant-password")
+        late_withdrawal = self.client.post(
+            f"/api/reports/{active_id}/close",
+            json={"reason": "found_report_withdrawn"},
+        )
+        self.assertEqual(late_withdrawal.status_code, 409)
+        self.assertEqual(late_withdrawal.json()["detail"].find("awaiting office intake") >= 0, True)
+
     def test_rejected_claim_can_be_disputed_and_reviewed_once(self):
         self.login("finder@example.test", "finder-password")
         found_response = self.client.post(
