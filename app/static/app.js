@@ -167,6 +167,78 @@ function navigate(view) {
   refreshNotificationBadge();
 }
 
+function setReportMode(type) {
+  if (!["lost", "found"].includes(type)) return;
+  const wasOpen = !$("#reportForm").classList.contains("hidden");
+  if (wasOpen && $("#reportType").value && $("#reportType").value !== type) {
+    $("#reportForm").reset();
+    $("#reportError").textContent = "";
+    $("#imageLabel").textContent = "Choose a photo";
+    showToast("Switched report type. The previous draft was cleared to avoid mixing Lost and Found details.", false);
+  }
+  $("#reportType").value = type;
+  $("#reportForm").classList.remove("hidden");
+  $$("[data-report-kind]").forEach((button) => {
+    button.classList.toggle("selected", button.dataset.reportKind === type);
+    button.setAttribute("aria-pressed", button.dataset.reportKind === type ? "true" : "false");
+  });
+  if (type === "lost") {
+    $("#reportModeTitle").textContent = "Report a lost item";
+    $("#reportModeDescription").textContent = "Tell us what went missing. Your report stays in your account and can be compared with items registered by the office.";
+    $("#reportFormStepTitle").textContent = "What went missing?";
+    $("#reportFormStepHint").textContent = "Describe the item and its last known context.";
+    $("#reportDateLabel").textContent = "When did you last see it?";
+    $("#reportDateHelp").textContent = "An approximate time helps matching. Leave it blank if you are unsure.";
+    $("#reportLocationHeading").textContent = "Where did you last see it?";
+    $("#reportLocationHelp").textContent = "Choose the nearest block or nearby place.";
+    $("#reportTitle").placeholder = "e.g. Black backpack I lost";
+    $("#reportSubmitLabel").textContent = "Submit lost report";
+  } else {
+    $("#reportModeTitle").textContent = "Report a found item";
+    $("#reportModeDescription").textContent = "Record what you found and where. The item only becomes searchable after office staff confirm physical receipt and tagging.";
+    $("#reportFormStepTitle").textContent = "What did you find?";
+    $("#reportFormStepHint").textContent = "Describe the item without exposing private owner details.";
+    $("#reportDateLabel").textContent = "When did you find it?";
+    $("#reportDateHelp").textContent = "Use the approximate time you found the item. Office intake time is recorded separately.";
+    $("#reportLocationHeading").textContent = "Where did you find it?";
+    $("#reportLocationHelp").textContent = "Use the place where you found the item, not its eventual office storage location.";
+    $("#reportTitle").placeholder = "e.g. Silver water bottle I found";
+    $("#reportSubmitLabel").textContent = "Submit found report";
+  }
+  if (!$("#reportDate").value) {
+    const localNow = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+    $("#reportDate").value = localNow.toISOString().slice(0, 16);
+  }
+}
+
+function resetReportMode() {
+  $("#reportForm").reset();
+  $("#reportForm").classList.add("hidden");
+  $("#reportType").value = "";
+  $("#reportError").textContent = "";
+  $("#imageLabel").textContent = "Choose a photo";
+  $("#reportModeTitle").textContent = "Choose your report type";
+  $("#reportModeDescription").textContent = "Lost and Found have separate guided paths so each report starts with the right context.";
+  $("#reportFormStepTitle").textContent = "Report details";
+  $("#reportFormStepHint").textContent = "Add the item and context.";
+  $$("[data-report-kind]").forEach((button) => {
+    button.classList.remove("selected");
+    button.setAttribute("aria-pressed", "false");
+  });
+}
+
+function evidenceTypeLabel(value) {
+  const labels = {
+    distinctive_features: "Distinctive features",
+    purchase_or_receipt: "Purchase / receipt proof",
+    packaging_or_accessory: "Packaging or paired accessory",
+    timeline_and_location: "Date and location context",
+    device_or_account_context: "Device / account context",
+    other: "Other verifiable evidence"
+  };
+  return labels[value] || value;
+}
+
 function buildQuery(formValues) {
   const params = new URLSearchParams();
   Object.keys(formValues).forEach((key) => {
@@ -186,6 +258,7 @@ function itemCard(report, options) {
   const claimButton = opts.claim
     ? '<button class="button button-primary button-small" type="button" data-claim="' + escapeHTML(report.id) + '">Submit claim ↗</button>'
     : "";
+  const detailsButton = '<button class="button button-quiet button-small" type="button" data-view-details="' + escapeHTML(report.id) + '">View details</button>';
   const characteristics = [
     report.brand ? "Brand: " + report.brand : "",
     report.primary_color ? "Colour: " + report.primary_color : "",
@@ -208,7 +281,7 @@ function itemCard(report, options) {
     characteristicBlock + reasons +
     '<div class="item-meta"><span><b>⌖</b>' + escapeHTML(report.location || "Location not specified") + "</span>" +
     '<span><b>◷</b>' + escapeHTML(humanDate(report.occurred_at)) + "</span></div>" +
-    '<div class="item-actions">' + strength + claimButton + "</div></div></article>";
+    '<div class="item-actions">' + strength + detailsButton + claimButton + "</div></div></article>";
 }
 
 async function loadBrowse() {
@@ -223,6 +296,7 @@ async function loadBrowse() {
   });
   try {
     const data = await api("/api/reports" + (query ? "?" + query : ""));
+    lastKnownReports = data.reports;
     $("#browseResults").innerHTML = data.reports.map((report) => itemCard(report, { claim: currentUser.role === "student" })).join("");
     $("#browseCount").textContent = data.reports.length + (data.reports.length === 1 ? " item" : " items");
     $("#browseEmpty").classList.toggle("hidden", data.reports.length > 0);
@@ -244,8 +318,13 @@ function resetSearch() {
 async function submitReport(event) {
   event.preventDefault();
   $("#reportError").textContent = "";
+  const reportType = $("#reportType").value;
+  if (!reportType) {
+    $("#reportError").textContent = "Choose whether you lost or found the item first.";
+    return;
+  }
   const body = {
-    report_type: $("#reportType").value,
+    report_type: reportType,
     title: $("#reportTitle").value.trim(),
     category: $("#reportCategory").value,
     description: $("#reportDescription").value.trim(),
@@ -282,10 +361,7 @@ async function submitReport(event) {
         successMessage += " The report was saved, but the photo upload failed: " + uploadError.message;
       }
     }
-    $("#reportForm").reset();
-    $("#imageLabel").textContent = "Choose a photo";
-    const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
-    $("#reportDate").value = now.toISOString().slice(0, 16);
+    resetReportMode();
     navigate("my-reports");
     showToast(successMessage, photoFailed);
   } catch (error) {
@@ -345,8 +421,12 @@ async function loadMatches(reportId) {
   $("#matchResults").innerHTML = '<div class="list-card"><p>Comparing report details…</p></div>';
   try {
     const result = await api("/api/reports/" + encodeURIComponent(reportId) + "/matches");
-    $("#matchResults").innerHTML = result.matches.map((match) => itemCard(match.report, {
-      claim: true, strength: match.strength, reasons: match.reasons
+    const detailedMatches = result.matches.map((match) => ({
+      ...match.report, match_strength: match.strength, match_reasons: match.reasons || []
+    }));
+    lastKnownReports = lastKnownReports.filter((report) => !detailedMatches.some((match) => match.id === report.id)).concat(detailedMatches);
+    $("#matchResults").innerHTML = detailedMatches.map((report) => itemCard(report, {
+      claim: true, strength: report.match_strength, reasons: report.match_reasons
     })).join("");
     if (!result.matches.length) {
       $("#matchResults").innerHTML = '<div class="empty-state"><span class="empty-icon">⌕</span><h3>No available matches yet</h3><p>Your report remains active. Try checking again after new found-item reports are received by the office.</p></div>';
