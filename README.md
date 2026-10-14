@@ -51,3 +51,26 @@ SQLite and local file storage are suitable for prototype evaluation, not a claim
 - [Round 1 jury overview](ROUND_1_JURY.md) — detailed solution narrative, architecture, Mermaid flowcharts, demo plan and jury Q&A.
 - [Local development and run commands](LOCAL_DEVELOPMENT.md) — installation, environment, demo access, optional models and tests.
 - [Campus operations and integration](CAMPUS_OPERATIONS.md) — item custody, Tag ID returns, staff procedure and Campus Sync integration prerequisites.
+
+
+## Jury demo: student and office portals side by side
+
+After installing dependencies in `.venv`, run this from the repository root in PowerShell:
+
+```powershell
+.\scripts\run-jury-demo.ps1
+```
+
+The script opens two local instances backed by the same demo SQLite database: the student portal at `http://localhost:8000` and the office portal at `http://127.0.0.1:8001`. The distinct hostnames keep the browser's session cookies separate while both portals see the same reports and claim workflow. Keep both terminal windows open. Stop each server with `Ctrl+C`.
+
+Demo-only accounts:
+
+| Role | Email | Password |
+|---|---|---|
+| Student 1 | `student@lostlink.local` | `student123` |
+| Student 2 | `student2@lostlink.local` | `student2123` |
+| Student 3 | `student3@lostlink.local` | `student3123` |
+| Student 4 | `student4@lostlink.local` | `student4123` |
+| Office | `office@lostlink.local` | `office123` |
+
+This is a local jury demonstration, not a production deployment. Do not expose the ports to the public internet. The prototype watermarks public photo previews and blocks exact/near-duplicate report/evidence images; browsers cannot be made completely incapable of saving or screenshotting displayed images.
