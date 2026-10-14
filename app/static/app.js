@@ -309,7 +309,7 @@ async function loadMyClaims() {
       if (claim.status === "disputed") guidance = "Competing claims need to be reviewed before this item can be approved.";
       if (claim.status === "needs_more_evidence") guidance = "The office has requested additional evidence. Add details without sharing passwords, PINs or one-time codes.";
       if (claim.status === "approved_for_collection") guidance = "Your claim has been verified. The campus office will confirm the physical handover separately.";
-      if (claim.status === "returned") guidance = "The office recorded the return of the item.";
+      if (claim.status === "returned") guidance = "The office recorded the return of the item. This claim is complete.";
       if (claim.status === "rejected") guidance = "This claim was not approved. Contact the campus office if you believe the decision needs review.";
       const addEvidence = claim.status === "needs_more_evidence"
         ? '<button class="button button-primary button-small" type="button" data-add-evidence="' + escapeHTML(claim.id) + '">Add evidence</button>'
