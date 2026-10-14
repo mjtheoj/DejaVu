@@ -8,6 +8,11 @@ if (-not (Test-Path $python)) {
     throw "Missing .venv Python. Create .venv and install requirements.txt before running this script."
 }
 
+& $python -c "import fastapi, uvicorn; import app.main"
+if ($LASTEXITCODE -ne 0) {
+    throw "The virtual environment is missing working dependencies. Recreate .venv with Python 3.12 and run: python -m pip install -r requirements.txt"
+}
+
 $dbDir = Join-Path $root "data"
 $uploads = Join-Path $dbDir "uploads"
 $dbPath = Join-Path $dbDir "lostlink.db"
