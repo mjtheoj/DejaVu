@@ -213,6 +213,20 @@
     </form>
   </dialog>
 
+<dialog id="handoverDialog" class="dialog-card">
+    <form id="handoverForm" class="form-stack">
+      <div class="dialog-heading"><div><p class="eyebrow">PHYSICAL RETURN</p><h2>Confirm item handover</h2></div><button id="closeHandover" type="button" class="icon-button" aria-label="Close">×</button></div>
+      <p id="handoverSummary" class="muted small-copy">Read the physical label and verify the claimant before release.</p>
+      <label>Physical Tag ID <span class="field-required">Required</span><input id="handoverTag" required minlength="4" maxlength="80" autocomplete="off" placeholder="Read the ID printed on the item's physical label"></label>
+      <label class="checkbox-line"><input id="handoverIdentityChecked" type="checkbox" required> I checked the claimant's identity under campus policy.</label>
+      <label class="checkbox-line"><input id="handoverPhysicalChecked" type="checkbox" required> I physically handed the item to the verified claimant.</label>
+      <label>Internal handover note <span class="field-optional">Optional</span><textarea id="handoverNote" rows="2" maxlength="800" placeholder="Do not include sensitive personal data"></textarea></label>
+      <p class="field-hint">If the Tag ID does not match the record, stop the release and re-check the physical item.</p>
+      <p id="handoverError" class="form-error" role="alert"></p>
+      <div class="form-actions"><button id="confirmHandoverButton" class="button button-primary" type="submit">Record physical handover</button><button id="cancelHandover" class="button button-quiet" type="button">Cancel</button></div>
+    </form>
+  </dialog>
+
 <dialog id="claimDialog" class="dialog-card">
     <form id="claimForm" class="form-stack">
       <div class="dialog-heading"><div><p class="eyebrow">OWNERSHIP CLAIM</p><h2>Help verify this item</h2></div><button id="closeClaim" type="button" class="icon-button" aria-label="Close">×</button></div>
