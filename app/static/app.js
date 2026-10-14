@@ -10,6 +10,7 @@ let reportSubmitting = false;
 let claimSubmitting = false;
 let selectedEvidenceClaimId = null;
 let selectedStorageReportId = null;
+let selectedHandoverClaimId = null;
 let selectedCloseReportId = null;
 let selectedCloseReportType = null;
 
@@ -850,28 +851,53 @@ async function submitClaimDispute(claimId) {
   } catch (error) { showToast(error.message, true); }
 }
 
-async function submitHandover(claimId, expectedTag) {
-  const actualTag = window.prompt("Read the physical label and enter its exact LostLink Tag ID:", "");
-  if (actualTag === null) return;
-  if (!actualTag.trim()) {
-    showToast("Tag ID is required to record handover.", true);
+function openHandoverDialog(claimId, itemTitle) {
+  selectedHandoverClaimId = claimId;
+  $("#handoverSummary").textContent = "Before releasing " + itemTitle + ", read the physical label and compare it with the Tag ID in the office record.";
+  $("#handoverTag").value = "";
+  $("#handoverIdentityChecked").checked = false;
+  $("#handoverPhysicalChecked").checked = false;
+  $("#handoverNote").value = "";
+  $("#handoverError").textContent = "";
+  $("#confirmHandoverButton").disabled = false;
+  $("#handoverDialog").showModal();
+  $("#handoverTag").focus();
+}
+
+async function submitHandover(event) {
+  event.preventDefault();
+  if (!selectedHandoverClaimId) return;
+  const tagId = $("#handoverTag").value.trim();
+  if (tagId.length < 4) {
+    $("#handoverError").textContent = "Enter the exact physical Tag ID from the item label.";
+    $("#handoverTag").focus();
     return;
   }
-  if (!window.confirm("Confirm that you personally checked the claimant's identity and physically handed over the item?")) return;
-  const note = window.prompt("Optional handover note (do not include sensitive personal data):", "") || "";
+  if (!$("#handoverIdentityChecked").checked || !$("#handoverPhysicalChecked").checked) {
+    $("#handoverError").textContent = "Confirm both the identity check and actual physical handover.";
+    return;
+  }
+  $("#handoverError").textContent = "";
+  $("#confirmHandoverButton").disabled = true;
   try {
-    const result = await api("/api/claims/" + encodeURIComponent(claimId) + "/handover", {
+    const result = await api("/api/claims/" + encodeURIComponent(selectedHandoverClaimId) + "/handover", {
       method: "POST",
       body: {
-        tag_id: actualTag.trim(),
-        confirmed_physical_handover: true,
-        claimant_identity_checked: true,
-        note: note.trim() || null
+        tag_id: tagId,
+        confirmed_physical_handover: $("#handoverPhysicalChecked").checked,
+        claimant_identity_checked: $("#handoverIdentityChecked").checked,
+        note: $("#handoverNote").value.trim() || null
       }
     });
+    $("#handoverDialog").close();
+    selectedHandoverClaimId = null;
     showToast(result.message, false);
     await loadOffice();
-  } catch (error) { showToast(error.message, true); }
+  } catch (error) {
+    $("#handoverError").textContent = error.message;
+  } finally {
+    $("#confirmHandoverButton").disabled = false;
+  }
 }
 
 
@@ -956,7 +982,10 @@ document.addEventListener("click", (event) => {
   const decision = event.target.closest("[data-decision]");
   if (decision) submitDecision(decision.dataset.claimId, decision.dataset.decision);
   const handover = event.target.closest("[data-handover]");
-  if (handover) submitHandover(handover.dataset.handover, handover.dataset.tag);
+  if (handover) {
+    const itemTitle = handover.closest(".list-card")?.querySelector("h3")?.textContent || "this item";
+    openHandoverDialog(handover.dataset.handover, itemTitle);
+  }
   const storageUpdate = event.target.closest("[data-storage-update]");
   if (storageUpdate) {
     const itemTitle = storageUpdate.closest(".list-card")?.querySelector("h3")?.textContent || "Tagged item";
@@ -977,6 +1006,9 @@ $("#reportImage").addEventListener("change", () => {
 });
 $("#cancelReport").addEventListener("click", () => navigate("browse"));
 $("#claimForm").addEventListener("submit", submitClaim);
+$("#handoverForm").addEventListener("submit", submitHandover);
+$("#closeHandover").addEventListener("click", () => { $("#handoverDialog").close(); selectedHandoverClaimId = null; });
+$("#cancelHandover").addEventListener("click", () => { $("#handoverDialog").close(); selectedHandoverClaimId = null; });
 $("#additionalEvidenceForm").addEventListener("submit", submitAdditionalEvidence);
 $("#closeAdditionalEvidence").addEventListener("click", () => { $("#additionalEvidenceDialog").close(); selectedEvidenceClaimId = null; });
 $("#cancelAdditionalEvidence").addEventListener("click", () => { $("#additionalEvidenceDialog").close(); selectedEvidenceClaimId = null; });
