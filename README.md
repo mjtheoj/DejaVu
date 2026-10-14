@@ -73,6 +73,16 @@ When DEMO_MODE=true, local sample data and demo accounts are available:
 
 These credentials are for local evaluation only. Do not expose a demo-mode server to the public internet. Set a strong random session secret before any shared deployment. SQLite data and uploaded images live under the local data/ directory, which is ignored by Git.
 
+## Suggested local demo sequence
+
+1. Sign in as the demo student and open the seeded lost backpack report under My Reports. Use Find possible matches to demonstrate candidate ranking and explanations.
+2. Submit a found-item report as the student. Sign in as the campus office and confirm physical receipt. The item receives a physical tag and the reporter earns 10 points.
+3. Repeat with a second found report and confirm intake. The student reaches the 20-point Verified Finder milestone and can download the prototype PDF certificate in Activity & Certificates.
+4. As the student, claim an available found item using private evidence. As office staff, review the evidence, approve the claim, then record the physical handover by entering the exact tag ID and confirming the identity/hand-over check.
+5. Return to the student's Notifications and Activity & Certificates sections to show match/review updates, the point ledger and the issued certificate.
+
+The demo data is illustrative. A demo intake action represents an office-confirmed event in the local database; it is not evidence of an actual campus recovery.
+
 ## Tests
 
 Install test dependencies and run the full unit and workflow tests:
