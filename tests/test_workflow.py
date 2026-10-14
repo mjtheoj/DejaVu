@@ -377,6 +377,15 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.logout()
 
         self.login("claimant@example.test", "claimant-password")
+        second_claim = self.client.post(
+            "/api/claims",
+            json={
+                "report_id": found_report_id,
+                "evidence": "This is a new attempt for the same physical item with enough explanation to test duplicate claim protections.",
+            },
+        )
+        self.assertEqual(second_claim.status_code, 409)
+        self.assertIn("one-time review request", second_claim.json()["detail"])
         appeal = self.client.post(
             f"/api/claims/{claim_id}/dispute",
             json={"reason": "I can provide another identifying detail that was not considered during the first review."},
