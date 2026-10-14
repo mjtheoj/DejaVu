@@ -1148,10 +1148,15 @@ async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authentic
         if report["created_by"] == user["id"]:
             raise HTTPException(status_code=400, detail="You cannot claim your own found-item report.")
         existing_own = conn.execute(
-            "SELECT id FROM claims WHERE report_id=? AND claimant_id=? AND status IN ('pending','disputed','needs_more_evidence','approved_for_collection')",
+            "SELECT id, status FROM claims WHERE report_id=? AND claimant_id=? AND status IN ('pending','disputed','needs_more_evidence','approved_for_collection','rejected')",
             (body.report_id, user["id"])
         ).fetchone()
         if existing_own:
+            if existing_own["status"] == "rejected":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Your previous claim was not approved. Use the one-time review request on My Claims instead of submitting another claim."
+                )
             raise HTTPException(status_code=409, detail="You already have an active claim for this item.")
         active = conn.execute(
             "SELECT id FROM claims WHERE report_id=? AND status IN ('pending','disputed','needs_more_evidence')",
