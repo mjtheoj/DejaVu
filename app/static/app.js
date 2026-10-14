@@ -14,7 +14,7 @@ const STATUS_LABELS = {
   open: "Open", awaiting_intake: "Awaiting office intake", available: "Available at office",
   claim_approved: "Claim verified", pending: "Under review", disputed: "Disputed",
   needs_more_evidence: "More evidence requested", approved_for_collection: "Claim verified",
-  rejected: "Not approved"
+  rejected: "Not approved", returned: "Returned to owner"
 };
 const escapeHTML = (value) => String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -120,7 +120,8 @@ function enterApp(user) {
   $("#roleChip").textContent = user.role === "office" ? "Office staff" : "Student";
   $("#roleChip").className = "role-chip" + (user.role === "office" ? " role-chip-office" : "");
   $("#officeNavButton").classList.toggle("hidden", user.role !== "office");
-  $$('[data-view="report"], [data-view="my-reports"], [data-view="my-claims"]').forEach((button) => {
+  $("#activityNavButton").classList.toggle("hidden", user.role === "office");
+  $('[data-view="report"], [data-view="my-reports"], [data-view="my-claims"]').forEach((button) => {
     button.classList.toggle("hidden", user.role === "office");
   });
   $("#welcomeTitle").textContent = user.role === "office" ? "Manage found items and claims." : "Find what you are looking for.";
@@ -134,10 +135,11 @@ function enterApp(user) {
 function navigate(view) {
   if (!currentUser) return;
   if (view === "office" && currentUser.role !== "office") view = "browse";
-  if (currentUser.role === "office" && ["report", "my-reports", "my-claims"].includes(view)) view = "office";
+  if (currentUser.role === "office" && ["report", "my-reports", "my-claims", "activity"].includes(view)) view = "office";
   const sections = {
     browse: "#browseView", report: "#reportView", "my-reports": "#myReportsView",
-    "my-claims": "#myClaimsView", office: "#officeView"
+    "my-claims": "#myClaimsView", notifications: "#notificationsView",
+    activity: "#activityView", office: "#officeView"
   };
   Object.values(sections).forEach((selector) => $(selector).classList.add("hidden"));
   $(sections[view] || sections.browse).classList.remove("hidden");
@@ -147,6 +149,9 @@ function navigate(view) {
   if (view === "my-reports") loadMyReports();
   if (view === "my-claims") loadMyClaims();
   if (view === "office") loadOffice();
+  if (view === "notifications") loadNotifications();
+  if (view === "activity") loadActivity();
+  refreshNotificationBadge();
 }
 
 function buildQuery(formValues) {
@@ -303,7 +308,8 @@ async function loadMyClaims() {
       let guidance = "Your claim is awaiting review by authorised office staff.";
       if (claim.status === "disputed") guidance = "Competing claims need to be reviewed before this item can be approved.";
       if (claim.status === "needs_more_evidence") guidance = "The office has requested additional evidence. Add details without sharing passwords, PINs or one-time codes.";
-      if (claim.status === "approved_for_collection") guidance = "Your claim has been verified. Follow the campus office process for the next step. This app does not record collection.";
+      if (claim.status === "approved_for_collection") guidance = "Your claim has been verified. The campus office will confirm the physical handover separately.";
+      if (claim.status === "returned") guidance = "The office recorded the return of the item.";
       if (claim.status === "rejected") guidance = "This claim was not approved. Contact the campus office if you believe the decision needs review.";
       const addEvidence = claim.status === "needs_more_evidence"
         ? '<button class="button button-primary button-small" type="button" data-add-evidence="' + escapeHTML(claim.id) + '">Add evidence</button>'
@@ -396,7 +402,9 @@ async function loadOffice() {
       ["Awaiting intake", summary.awaiting_intake],
       ["Items available", summary.available_items],
       ["Active claims", summary.active_claims],
-      ["Disputed claims", summary.disputed_claims]
+      ["Disputed claims", summary.disputed_claims],
+      ["Ready for handover", summary.approved_handover || 0],
+      ["Items returned", summary.returned_items || 0]
     ].map((stat) => '<div class="stat-card"><span>' + escapeHTML(stat[0]) + '</span><strong>' + escapeHTML(stat[1]) + "</strong></div>").join("");
     const queue = queueData.reports.filter((report) => report.status === "awaiting_intake");
     $("#intakeQueue").innerHTML = queue.map((report) => intakeCard(report)).join("");
@@ -404,7 +412,24 @@ async function loadOffice() {
     const active = claimData.claims.filter((claim) => ["pending", "disputed", "needs_more_evidence"].includes(claim.status));
     $("#officeClaims").innerHTML = active.map((claim) => officeClaimCard(claim)).join("");
     $("#officeClaimsEmpty").classList.toggle("hidden", active.length > 0);
+    const handovers = claimData.claims.filter((claim) => claim.status === "approved_for_collection");
+    $("#handoverQueue").innerHTML = handovers.map((claim) => officeHandoverCard(claim)).join("");
+    $("#handoverEmpty").classList.toggle("hidden", handovers.length > 0);
+    refreshNotificationBadge();
   } catch (error) { showToast(error.message, true); }
+}
+
+function officeHandoverCard(claim) {
+  const report = claim.report;
+  return '<article class="list-card"><div class="list-card-head"><div><h3>' +
+    escapeHTML(report.title + " · " + report.public_ref) + '</h3><p>Claimant: ' +
+    escapeHTML(claim.claimant_name) + " · " + escapeHTML(claim.claimant_email) +
+    "</p></div><span class=\"" + statusClass(claim.status) + "\">Verified claim</span></div>" +
+    '<div class="internal-meta"><span>Physical tag: ' + escapeHTML(report.tag_id || "Not assigned") +
+    "</span><span>Verification level: " + escapeHTML(report.verification_level ? "L" + report.verification_level : "Not assigned") +
+    "</span></div><p>Before release, compare the physical item with the tag and verify the claimant under campus policy.</p>" +
+    '<div class="card-actions"><button class="button button-primary button-small" type="button" data-handover="' +
+    escapeHTML(claim.id) + '" data-tag="' + escapeHTML(report.tag_id || "") + '">Confirm physical handover</button></div></article>';
 }
 
 function intakeCard(report) {
@@ -460,11 +485,115 @@ async function submitIntake(event) {
   } catch (error) { showToast(error.message, true); }
 }
 
+
+
+async function refreshNotificationBadge() {
+  if (!currentUser) return;
+  try {
+    const data = await api("/api/notifications");
+    const badge = $("#notificationNavCount");
+    badge.textContent = String(data.unread_count || 0);
+    badge.classList.toggle("hidden", !data.unread_count);
+  } catch (_) {}
+}
+
+async function loadNotifications() {
+  if (!currentUser) return;
+  try {
+    const data = await api("/api/notifications");
+    $("#notificationNavCount").textContent = String(data.unread_count || 0);
+    $("#notificationNavCount").classList.toggle("hidden", !data.unread_count);
+    $("#notificationsList").innerHTML = data.notifications.map((item) =>
+      '<article class="notification-card ' + (item.read_at ? "is-read" : "is-unread") + '">' +
+      '<div class="notification-mark">' + (item.read_at ? "✓" : "•") + "</div><div class=\\"notification-content\\"><div class=\\"notification-heading\\"><strong>" +
+      escapeHTML(item.title) + '</strong><span>' + escapeHTML(humanDateTime(item.created_at)) + "</span></div><p>" +
+      escapeHTML(item.message) + "</p>" + (!item.read_at
+        ? '<button class="button button-quiet button-small" type="button" data-notification-read="' + escapeHTML(item.id) + '">Mark read</button>'
+        : "") + "</div></article>"
+    ).join("");
+    $("#notificationsEmpty").classList.toggle("hidden", data.notifications.length > 0);
+  } catch (error) { showToast(error.message, true); }
+}
+
+async function markNotificationRead(notificationId) {
+  try {
+    await api("/api/notifications/" + encodeURIComponent(notificationId) + "/read", { method: "POST" });
+    await loadNotifications();
+  } catch (error) { showToast(error.message, true); }
+}
+
+async function markAllNotificationsRead() {
+  try {
+    await api("/api/notifications/read-all", { method: "POST" });
+    await loadNotifications();
+    showToast("Notifications marked as read.", false);
+  } catch (error) { showToast(error.message, true); }
+}
+
+async function loadActivity() {
+  if (!currentUser || currentUser.role !== "student") return;
+  try {
+    const data = await api("/api/activity/me");
+    const total = Number(data.total_points || 0);
+    const next = data.next_milestone;
+    const progress = next ? Math.min(100, total / next.threshold * 100) : 100;
+    const nextText = next
+      ? (data.points_to_next_milestone + " more points to " + next.tier)
+      : "All current recognition milestones earned";
+    $("#activityOverview").innerHTML =
+      '<div class="activity-points-card"><div><p class="eyebrow">VERIFIED ACTIVITY</p><strong>' + escapeHTML(total) +
+      '</strong><span>total points</span></div><div class="points-symbol">✦</div><p class="muted">Points are awarded for contributions verified by the campus office.</p></div>' +
+      '<div class="milestone-card"><div class="milestone-heading"><div><p class="eyebrow">NEXT MILESTONE</p><h3>' +
+      escapeHTML(next ? next.tier : "Recognition complete") + '</h3></div><span class="count-pill">' +
+      escapeHTML(next ? (next.threshold + " pts") : "Complete") + "</span></div><div class=\\"progress-track\\"><span style=\\"width:" +
+      progress + '%"></span></div><p class="muted">' + escapeHTML(nextText) + '</p><div class="point-rules"><span>+10 <small>verified office intake</small></span><span>+5 <small>verified return</small></span></div></div>';
+    $("#certificateList").innerHTML = data.certificates.map((certificate) =>
+      '<article class="certificate-card"><div class="certificate-emblem">✧</div><div class="certificate-copy"><span class="item-ref">' +
+      escapeHTML(certificate.serial) + "</span><h3>" + escapeHTML(certificate.tier) + '</h3><p class="muted">' +
+      escapeHTML(certificate.points_at_issue + " points at issue · " + humanDate(certificate.issued_at)) + '</p></div><button class="button button-primary button-small" type="button" data-certificate-download="' +
+      escapeHTML(certificate.id) + '">Download PDF ↗</button></article>'
+    ).join("");
+    $("#certificateEmpty").classList.toggle("hidden", data.certificates.length > 0);
+    $("#activityLedger").innerHTML = data.ledger.map((entry) =>
+      '<article class="ledger-row"><div class="ledger-icon">＋</div><div class="ledger-copy"><strong>' +
+      escapeHTML(entry.reason) + '</strong><small>' + escapeHTML(humanDateTime(entry.created_at)) +
+      (entry.report_id ? " · Verified report recorded" : "") + '</small></div><span class="ledger-points">+' +
+      escapeHTML(entry.points) + " pts</span></article>"
+    ).join("");
+    $("#activityEmpty").classList.toggle("hidden", data.ledger.length > 0);
+  } catch (error) { showToast(error.message, true); }
+}
+
+async function submitHandover(claimId, expectedTag) {
+  const actualTag = window.prompt("Read the physical label and enter its exact LostLink Tag ID:", "");
+  if (actualTag === null) return;
+  if (!actualTag.trim()) {
+    showToast("Tag ID is required to record handover.", true);
+    return;
+  }
+  if (!window.confirm("Confirm that you personally checked the claimant's identity and physically handed over the item?")) return;
+  const note = window.prompt("Optional handover note (do not include sensitive personal data):", "") || "";
+  try {
+    const result = await api("/api/claims/" + encodeURIComponent(claimId) + "/handover", {
+      method: "POST",
+      body: {
+        tag_id: actualTag.trim(),
+        confirmed_physical_handover: true,
+        claimant_identity_checked: true,
+        note: note.trim() || null
+      }
+    });
+    showToast(result.message, false);
+    await loadOffice();
+  } catch (error) { showToast(error.message, true); }
+}
+
+
 async function submitDecision(claimId, action) {
   const noteInput = $('[data-note-for="' + CSS.escape(claimId) + '"]');
   const note = noteInput ? noteInput.value.trim() : "";
   const prompts = {
-    approve: "Verify this claim only after reviewing the private evidence. Physical collection is not recorded here.",
+    approve: "Verify this claim only after reviewing the private evidence. It will then move to the handover queue.",
     reject: "Reject this claim after reviewing the evidence?",
     request_more_evidence: "Ask the claimant for additional evidence?",
     mark_disputed: "Keep this claim on hold as disputed?"
@@ -532,8 +661,15 @@ document.addEventListener("click", (event) => {
   if (evidence) submitAdditionalEvidence(evidence.dataset.addEvidence);
   const decision = event.target.closest("[data-decision]");
   if (decision) submitDecision(decision.dataset.claimId, decision.dataset.decision);
+  const handover = event.target.closest("[data-handover]");
+  if (handover) submitHandover(handover.dataset.handover, handover.dataset.tag);
+  const notification = event.target.closest("[data-notification-read]");
+  if (notification) markNotificationRead(notification.dataset.notificationRead);
+  const certificate = event.target.closest("[data-certificate-download]");
+  if (certificate) window.location.href = "/api/certificates/" + encodeURIComponent(certificate.dataset.certificateDownload) + "/download";
 });
 $("#searchForm").addEventListener("submit", (event) => { event.preventDefault(); loadBrowse(); });
+$("#readAllNotifications").addEventListener("click", markAllNotificationsRead);
 $("#clearFilters").addEventListener("click", resetSearch);
 $("#reportForm").addEventListener("submit", submitReport);
 $("#reportImage").addEventListener("change", () => {
