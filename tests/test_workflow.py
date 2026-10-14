@@ -153,11 +153,18 @@ class LostLinkWorkflowTests(unittest.TestCase):
             "/api/claims",
             json={
                 "report_id": found_report_id,
+                "lost_report_id": lost_report_id,
                 "evidence": "The inside left strap has a tiny stitched mark that matches my item, and I can confirm its contents in person.",
             },
         )
         self.assertEqual(claim_response.status_code, 200, claim_response.text)
         claim_id = claim_response.json()["claim"]["id"]
+        active_close = self.client.post(
+            f"/api/reports/{lost_report_id}/close",
+            json={"reason": "recovered_elsewhere", "note": "Trying to close while a claim is in progress."},
+        )
+        self.assertEqual(active_close.status_code, 409)
+        self.assertIn("claim under review", active_close.json()["detail"])
         self.logout()
 
         self.login("office@example.test", "office-password")
@@ -241,6 +248,12 @@ class LostLinkWorkflowTests(unittest.TestCase):
         claims = self.client.get("/api/claims")
         own_claim = next(item for item in claims.json()["claims"] if item["id"] == claim_id)
         self.assertEqual(own_claim["status"], "returned")
+        self.assertEqual(own_claim["linked_lost_report"]["status"], "closed")
+        closed_lost = next(
+            item for item in self.client.get("/api/reports?mine=true&report_type=lost").json()["reports"]
+            if item["id"] == lost_report_id
+        )
+        self.assertEqual(closed_lost["status"], "closed")
         self.assertNotIn("reviewer_note", own_claim)
         self.assertNotIn("evidence", own_claim)
 
