@@ -26,7 +26,34 @@ Older local database records whose storage location was never recorded are marke
 
 The Tag ID establishes which inventory record is being released; it does not, by itself, prove who owns the item. Identity and claim verification remain mandatory.
 
-## 3. Follow-up and accountability
+## 3. Report closure, withdrawal and status handling
+
+Student-owned reports have controlled exit paths so stale reports do not stay active forever:
+
+- An **open lost report** can be closed by its owner with a reason: recovered elsewhere, no longer searching, or duplicate. Its record stays visible to its owner, but candidate matching stops.
+- A **found report awaiting office intake** can be withdrawn by its owner only before physical custody is accepted. The withdrawal is logged and office staff are notified.
+- Once staff physically accept and tag a found item, the original reporter cannot withdraw it from the inventory. Campus staff must use the custody/return process.
+- Repeating a closure or trying to close a report in a later state returns a conflict instead of silently changing history.
+- Optional public characteristics include brand/make, primary colour and safe-to-share visible characteristics. These support search and matching. Private proof-of-ownership clues belong in claim evidence, not the public report description.
+- An optional date must be a valid ISO date/time. A block/building **or** a nearby area is required; room and floor are optional.
+
+### Key state transitions
+
+| Record | From | To | Actor / condition |
+|---|---|---|---|
+| Lost report | **Open** | **Closed** | Owner closes the search with a reason |
+| Found report | **Awaiting intake** | **Withdrawn** | Owner withdraws before office intake |
+| Found report | **Awaiting intake** | **Available** | Office confirms receipt, records location and assigns Tag ID |
+| Found report | **Available** | **Claim verified** | Office approves a claim after verification checks |
+| Found report | **Claim verified** | **Returned** | Office checks the exact tag and confirms identity plus physical handover |
+| Claim | Active review state | **Ready for handover** | Office approves after required checks and resolution of competing active claims |
+| Claim | Active review state | **Not approved** | Office rejects the claim |
+| Rejected claim | **Not approved** | **Disputed / review requested** | Claimant requests one review with a reason |
+| Claim | **Ready for handover** | **Returned** | Office records actual physical handover |
+
+The **Disputed** claim state can mean either competing claims or a claimant-requested review. The prototype stores the review request separately in the appeal note, so office staff can distinguish the reason. A rejected claim can be reviewed once; a completed handover and a closed report are final states in the current prototype.
+
+## 4. Follow-up and accountability
 
 - Found reports waiting for intake generate notifications to the office and reporter.
 - Intake, storage-location changes, claim decisions, handovers and verified rewards are audited.
