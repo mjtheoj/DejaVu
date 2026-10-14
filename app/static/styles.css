@@ -402,7 +402,7 @@ input::placeholder, textarea::placeholder { color: #a4aea7; }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.status-closed { color: #53655d; background: #e9eeea; }
+.status-closed, .status-cancelled { color: #53655d; background: #e9eeea; }
 
 .leaderboard-section { margin-top: 26px; }
 .leaderboard-summary { margin: 10px 0 14px; }
