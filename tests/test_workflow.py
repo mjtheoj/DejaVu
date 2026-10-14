@@ -227,5 +227,12 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.assertNotIn("reviewer_note", own_claim)
         self.assertNotIn("evidence", own_claim)
 
+        self.logout()
+        self.login("finder@example.test", "finder-password")
+        finder_notifications = self.client.get("/api/notifications").json()["notifications"]
+        intake_notice = next(item for item in finder_notifications if item["title"] == "Found item received and stored")
+        self.assertNotIn(tag_id, intake_notice["message"])
+        self.assertNotIn("Student Affairs Office - Cabinet B2", intake_notice["message"])
+
 if __name__ == "__main__":
     unittest.main()
