@@ -157,6 +157,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
                 "report_id": found_report_id,
                 "lost_report_id": lost_report_id,
                 "evidence": "The inside left strap has a tiny stitched mark that matches my item, and I can confirm its contents in person.",
+                "evidence_types": ["distinctive_features", "timeline_and_location"],
             },
         )
         self.assertEqual(claim_response.status_code, 200, claim_response.text)
@@ -338,6 +339,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
                 "report_id": found_id,
                 "lost_report_id": someone_elses_lost_id,
                 "evidence": "I can identify a fine line on the rear casing and verify the stored information in person.",
+                "evidence_types": ["distinctive_features", "device_or_account_context"],
             },
         )
         self.assertEqual(response.status_code, 409)
@@ -425,6 +427,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
             json={
                 "report_id": found_report_id,
                 "evidence": "The thermos has a scratch on the side and a mark below its base. I can verify its contents.",
+                "evidence_types": ["distinctive_features", "timeline_and_location"],
             },
         )
         self.assertEqual(claim_response.status_code, 200, claim_response.text)
@@ -445,6 +448,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
             json={
                 "report_id": found_report_id,
                 "evidence": "This is a new attempt for the same physical item with enough explanation to test duplicate claim protections.",
+                "evidence_types": ["other"],
             },
         )
         self.assertEqual(second_claim.status_code, 409)
