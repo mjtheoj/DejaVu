@@ -251,6 +251,14 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.assertNotIn(tag_id, intake_notice["message"])
         self.assertNotIn("Student Affairs Office - Cabinet B2", intake_notice["message"])
 
+    def test_invalid_optional_report_date_is_rejected(self):
+        self.login("claimant@example.test", "claimant-password")
+        body = self.report_body("lost", "Blue headphones", "Blue over-ear headphones with a padded headband.")
+        body["occurred_at"] = "not-a-real-date"
+        response = self.client.post("/api/reports", json=body)
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertIn("valid ISO date and time", response.json()["detail"])
+
     def test_lost_report_can_be_closed_and_no_longer_matched(self):
         self.login("claimant@example.test", "claimant-password")
         created = self.client.post(
