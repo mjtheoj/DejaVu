@@ -4,6 +4,7 @@ const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selec
 let currentUser = null;
 let appConfig = null;
 let selectedClaimReport = null;
+let selectedCloseReportId = null;
 
 const CATEGORY_ICONS = {
   stationery: "▤", clothing: "◈", bags_wallets: "▣", accessories: "◇",
@@ -12,9 +13,9 @@ const CATEGORY_ICONS = {
 };
 const STATUS_LABELS = {
   open: "Open", awaiting_intake: "Awaiting office intake", available: "Available at office",
-  claim_approved: "Claim verified", pending: "Under review", disputed: "Disputed",
-  needs_more_evidence: "More evidence requested", approved_for_collection: "Claim verified",
-  rejected: "Not approved", returned: "Returned to owner"
+  claim_approved: "Awaiting handover", pending: "Under review", disputed: "Disputed · review required",
+  needs_more_evidence: "More evidence requested", approved_for_collection: "Ready for handover",
+  rejected: "Not approved", returned: "Returned to owner", closed: "Closed"
 };
 const escapeHTML = (value) => String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -173,6 +174,14 @@ function itemCard(report, options) {
   const claimButton = opts.claim
     ? '<button class="button button-primary button-small" type="button" data-claim="' + escapeHTML(report.id) + '">Submit claim ↗</button>'
     : "";
+  const characteristics = [
+    report.brand ? "Brand: " + report.brand : "",
+    report.primary_color ? "Colour: " + report.primary_color : "",
+    report.visible_features ? report.visible_features : ""
+  ].filter(Boolean);
+  const characteristicBlock = characteristics.length
+    ? '<div class="characteristic-list">' + characteristics.map((value) => '<span class="characteristic-chip">' + escapeHTML(value) + '</span>').join("") + '</div>'
+    : "";
   const reasons = opts.reasons && opts.reasons.length
     ? '<ul class="reason-list">' + opts.reasons.map((reason) => "<li>" + escapeHTML(reason) + "</li>").join("") + "</ul>"
     : "";
@@ -184,7 +193,7 @@ function itemCard(report, options) {
     '<span class="category-pill">' + escapeHTML(report.category_label || categoryLabel(report.category)) + "</span></div>" +
     "<h3>" + escapeHTML(report.title) + "</h3>" +
     '<p class="item-description">' + escapeHTML(report.description) + "</p>" +
-    reasons +
+    characteristicBlock + reasons +
     '<div class="item-meta"><span><b>⌖</b>' + escapeHTML(report.location || "Location not specified") + "</span>" +
     '<span><b>◷</b>' + escapeHTML(humanDate(report.occurred_at)) + "</span></div>" +
     '<div class="item-actions">' + strength + claimButton + "</div></div></article>";
@@ -228,6 +237,9 @@ async function submitReport(event) {
     title: $("#reportTitle").value.trim(),
     category: $("#reportCategory").value,
     description: $("#reportDescription").value.trim(),
+    brand: $("#reportBrand").value.trim() || null,
+    primary_color: $("#reportColor").value.trim() || null,
+    visible_features: $("#reportFeatures").value.trim() || null,
     occurred_at: $("#reportDate").value || null,
     location_block: $("#reportBlock").value || null,
     location_floor: $("#reportFloor").value || null,
@@ -267,16 +279,27 @@ async function loadMyReports() {
       const matchButton = report.report_type === "lost" && report.status === "open"
         ? '<button class="button button-primary button-small" type="button" data-matches="' + escapeHTML(report.id) + '">Find possible matches</button>'
         : "";
+      const closeButton = report.report_type === "lost" && report.status === "open"
+        ? '<button class="button button-quiet button-small" type="button" data-close-report="' + escapeHTML(report.id) + '">Close report</button>'
+        : "";
       const type = report.report_type === "lost" ? "Lost report" : "Found report";
       const imageNote = report.report_type === "found" && report.status === "awaiting_intake"
         ? "The office must confirm physical receipt before the item can appear in search."
         : "";
+      const characteristics = [
+        report.brand ? "Brand: " + report.brand : "",
+        report.primary_color ? "Colour: " + report.primary_color : "",
+        report.visible_features || ""
+      ].filter(Boolean);
+      const extra = characteristics.length
+        ? '<div class="characteristic-list">' + characteristics.map((value) => '<span class="characteristic-chip">' + escapeHTML(value) + '</span>').join("") + '</div>'
+        : "";
       return '<article class="list-card"><div class="list-card-head"><div><h3>' + escapeHTML(report.title) + '</h3><p>' +
         escapeHTML(type + " · " + report.public_ref) + "</p></div><span class=\"" + statusClass(report.status) + "\">" +
-        escapeHTML(statusLabel(report.status)) + "</span></div><p>" + escapeHTML(report.description) + "</p>" +
+        escapeHTML(statusLabel(report.status)) + "</span></div><p>" + escapeHTML(report.description) + "</p>" + extra +
         '<div class="list-card-meta"><span>⌖ ' + escapeHTML(report.location) + "</span><span>◷ " + escapeHTML(humanDate(report.occurred_at)) + "</span></div>" +
         (imageNote ? '<p class="field-hint">' + escapeHTML(imageNote) + "</p>" : "") +
-        '<div class="card-actions">' + matchButton + "</div></article>";
+        '<div class="card-actions">' + matchButton + closeButton + "</div></article>";
     }).join("");
     $("#myReportsEmpty").classList.toggle("hidden", data.reports.length > 0);
   } catch (error) { showToast(error.message, true); }
@@ -306,19 +329,27 @@ async function loadMyClaims() {
     $("#claimNavCount").classList.toggle("hidden", activeCount === 0);
     $("#myClaimsList").innerHTML = data.claims.map((claim) => {
       let guidance = "Your claim is awaiting review by authorised office staff.";
-      if (claim.status === "disputed") guidance = "Competing claims need to be reviewed before this item can be approved.";
-      if (claim.status === "needs_more_evidence") guidance = "The office has requested additional evidence. Add details without sharing passwords, PINs or one-time codes.";
-      if (claim.status === "approved_for_collection") guidance = "Your claim has been verified. The campus office will confirm the physical handover separately.";
+      if (claim.status === "disputed") guidance = claim.appeal_note
+        ? "You requested a review of the earlier decision. The office must review the dispute before the claim can proceed."
+        : "Competing claims exist. The item is on hold until authorised office staff resolve the competing claims.";
+      if (claim.status === "needs_more_evidence") guidance = "The office has requested additional evidence. Add relevant details without sharing passwords, PINs or one-time codes.";
+      if (claim.status === "approved_for_collection") guidance = "Your claim has been verified. The item is not marked returned until campus staff confirm physical handover.";
       if (claim.status === "returned") guidance = "The office recorded the return of the item. This claim is complete.";
-      if (claim.status === "rejected") guidance = "This claim was not approved. Contact the campus office if you believe the decision needs review.";
+      if (claim.status === "rejected") guidance = "This claim was not approved. You can request one review by explaining what evidence may have been overlooked.";
       const addEvidence = claim.status === "needs_more_evidence"
         ? '<button class="button button-primary button-small" type="button" data-add-evidence="' + escapeHTML(claim.id) + '">Add evidence</button>'
         : "";
-      return '<article class="list-card"><div class="list-card-head"><div><h3>' + escapeHTML(claim.report.title) + '</h3><p>' +
+      const disputeForm = claim.status === "rejected" && Number(claim.appeal_count || 0) < 1
+        ? '<div class="claim-dispute-form"><label>Why should this decision be reviewed?<textarea data-dispute-reason="' + escapeHTML(claim.id) + '" rows="3" minlength="20" maxlength="1000" placeholder="Explain which evidence or detail should be reconsidered (at least 20 characters)."></textarea></label><button class="button button-quiet button-small" type="button" data-dispute-claim="' + escapeHTML(claim.id) + '">Request review</button></div>'
+        : "";
+      const appealNote = claim.appeal_note
+        ? '<div class="claim-appeal-note"><strong>Your review request</strong><p>' + escapeHTML(claim.appeal_note) + '</p></div>'
+        : "";
+      return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '"><div class="list-card-head"><div><h3>' + escapeHTML(claim.report.title) + '</h3><p>' +
         escapeHTML(claim.report.public_ref + " · Submitted " + humanDate(claim.created_at)) + "</p></div><span class=\"" + statusClass(claim.status) + "\">" +
-        escapeHTML(statusLabel(claim.status)) + "</span></div><p>" + escapeHTML(guidance) + '</p><div class="list-card-meta"><span>⌖ ' +
+        escapeHTML(statusLabel(claim.status)) + "</span></div><p>" + escapeHTML(guidance) + '</p>' + appealNote + '<div class="list-card-meta"><span>⌖ ' +
         escapeHTML(claim.report.location) + "</span><span>Reference " + escapeHTML(claim.report.public_ref) + "</span></div><div class=\"card-actions\">" +
-        addEvidence + "</div></article>";
+        addEvidence + "</div>" + disputeForm + "</article>";
     }).join("");
     $("#myClaimsEmpty").classList.toggle("hidden", data.claims.length > 0);
   } catch (error) { showToast(error.message, true); }
@@ -496,6 +527,7 @@ function officeClaimCard(claim) {
     '<div class="internal-meta"><span>Physical tag: ' + escapeHTML(report.tag_id || "Not assigned") + "</span><span>Verification: " + escapeHTML(level) +
     "</span><span>Value band: " + escapeHTML(report.value_band || "unknown") + "</span><span>Sensitivity: " + escapeHTML(report.sensitivity_level) + "</span></div>" +
     '<div class="claim-evidence"><strong>CLAIMANT EVIDENCE · PRIVATE</strong><p>' + escapeHTML(claim.evidence) + "</p></div>" +
+    (claim.appeal_note ? '<div class="claim-appeal-note"><strong>CLAIMANT REVIEW REQUEST</strong><p>' + escapeHTML(claim.appeal_note) + '</p></div>' : "") +
     '<div class="internal-detail"><strong>INTERNAL VERIFICATION DETAIL</strong><small>' + escapeHTML(privateDetail) + "</small></div>" +
     '<div class="list-card-meta"><span>⌖ ' + escapeHTML(report.location) + "</span><span>Submitted " + escapeHTML(humanDateTime(claim.created_at)) + "</span></div>" +
     (claim.status === "disputed" ? '<p class="field-hint">Resolve all competing active claims before approving any one claim.</p>' : "") +
@@ -585,6 +617,17 @@ async function loadActivity() {
       progress + '%"></span></div><p class="muted">' + escapeHTML(nextText) + '</p><div class="point-rules"><span>+' +
       escapeHTML(data.rules.verified_intake) + ' <small>verified office intake</small></span><span>+' +
       escapeHTML(data.rules.verified_return) + ' <small>verified return</small></span></div></div>';
+    const leaderboard = await api("/api/leaderboard");
+    $("#leaderboardParticipantCount").textContent = leaderboard.participant_count + (leaderboard.participant_count === 1 ? " contributor" : " contributors");
+    $("#leaderboardSummary").innerHTML = leaderboard.my_rank
+      ? '<div class="leaderboard-self"><span>Your current rank</span><strong>#' + escapeHTML(leaderboard.my_rank) + '</strong><small>' + escapeHTML(leaderboard.my_total_points) + ' verified points</small></div>'
+      : '<div class="leaderboard-self"><span>Your current rank</span><strong>—</strong><small>Earn points when the office verifies a contribution.</small></div>';
+    $("#leaderboardList").innerHTML = leaderboard.leaders.map((leader) =>
+      '<div class="leaderboard-row ' + (leader.display_name === currentUser.display_name ? "leaderboard-row-self" : "") + '"><span class="leaderboard-rank">#' +
+      escapeHTML(leader.rank) + '</span><span class="leaderboard-name">' + escapeHTML(leader.display_name) + '</span><span class="leaderboard-detail">' +
+      escapeHTML(leader.verified_reports) + ' reports</span><strong class="leaderboard-points">' + escapeHTML(leader.total_points) + ' pts</strong></div>'
+    ).join("");
+    $("#leaderboardEmpty").classList.toggle("hidden", leaderboard.leaders.length > 0);
     $("#certificateList").innerHTML = data.certificates.map((certificate) =>
       '<article class="certificate-card"><div class="certificate-emblem">✧</div><div class="certificate-copy"><span class="item-ref">' +
       escapeHTML(certificate.serial) + "</span><h3>" + escapeHTML(certificate.tier) + '</h3><p class="muted">' +
@@ -617,6 +660,46 @@ async function updateStorageLocation(reportId, currentLocation) {
     });
     showToast(result.message, false);
     await loadOffice();
+  } catch (error) { showToast(error.message, true); }
+}
+
+async function openCloseReport(reportId) {
+  selectedCloseReportId = reportId;
+  $("#closeReportError").textContent = "";
+  $("#closeReportNote").value = "";
+  $("#closeReportReason").value = "no_longer_searching";
+  $("#closeReportDialog").showModal();
+}
+
+async function submitCloseReport(event) {
+  event.preventDefault();
+  if (!selectedCloseReportId) return;
+  try {
+    const result = await api("/api/reports/" + encodeURIComponent(selectedCloseReportId) + "/close", {
+      method: "POST",
+      body: { reason: $("#closeReportReason").value, note: $("#closeReportNote").value.trim() || null }
+    });
+    $("#closeReportDialog").close();
+    selectedCloseReportId = null;
+    showToast(result.message, false);
+    await loadMyReports();
+  } catch (error) { $("#closeReportError").textContent = error.message; }
+}
+
+async function submitClaimDispute(claimId) {
+  const textarea = $('[data-dispute-reason="' + CSS.escape(claimId) + '"]');
+  const reason = textarea ? textarea.value.trim() : "";
+  if (reason.length < 20) {
+    showToast("Please explain why the decision should be reviewed (at least 20 characters).", true);
+    if (textarea) textarea.focus();
+    return;
+  }
+  try {
+    const result = await api("/api/claims/" + encodeURIComponent(claimId) + "/dispute", {
+      method: "POST", body: { reason }
+    });
+    showToast(result.message, false);
+    await loadMyClaims();
   } catch (error) { showToast(error.message, true); }
 }
 
@@ -719,6 +802,10 @@ document.addEventListener("click", (event) => {
   if (matches) loadMatches(matches.dataset.matches);
   const evidence = event.target.closest("[data-add-evidence]");
   if (evidence) submitAdditionalEvidence(evidence.dataset.addEvidence);
+  const dispute = event.target.closest("[data-dispute-claim]");
+  if (dispute) submitClaimDispute(dispute.dataset.disputeClaim);
+  const closeReport = event.target.closest("[data-close-report]");
+  if (closeReport) openCloseReport(closeReport.dataset.closeReport);
   const decision = event.target.closest("[data-decision]");
   if (decision) submitDecision(decision.dataset.claimId, decision.dataset.decision);
   const handover = event.target.closest("[data-handover]");
@@ -740,6 +827,9 @@ $("#reportImage").addEventListener("change", () => {
 });
 $("#cancelReport").addEventListener("click", () => navigate("browse"));
 $("#claimForm").addEventListener("submit", submitClaim);
+$("#closeReportForm").addEventListener("submit", submitCloseReport);
+$("#closeCloseReport").addEventListener("click", () => { $("#closeReportDialog").close(); selectedCloseReportId = null; });
+$("#cancelCloseReport").addEventListener("click", () => { $("#closeReportDialog").close(); selectedCloseReportId = null; });
 $("#closeClaim").addEventListener("click", () => $("#claimDialog").close());
 $("#cancelClaim").addEventListener("click", () => $("#claimDialog").close());
 $("#closeMatches").addEventListener("click", () => $("#matchesPanel").classList.add("hidden"));
