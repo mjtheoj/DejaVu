@@ -997,8 +997,7 @@ async def intake_found_item(
         notify_user(
             conn, row["created_by"], "found-intake:" + report_id,
             "Found item received and stored",
-            "Campus office confirmed physical receipt, assigned tag " + tag_id +
-            " and recorded storage at " + storage_location + ". The item is now available for matching.",
+            "Campus office confirmed physical receipt and storage of the item. It is now available for matching.",
             "report", report_id,
         )
         reporter = conn.execute("SELECT role FROM users WHERE id=?", (row["created_by"],)).fetchone()
