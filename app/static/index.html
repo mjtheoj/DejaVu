@@ -192,7 +192,28 @@
     </form>
   </dialog>
 
-  <dialog id="claimDialog" class="dialog-card">
+  <dialog id="additionalEvidenceDialog" class="dialog-card">
+    <form id="additionalEvidenceForm" class="form-stack">
+      <div class="dialog-heading"><div><p class="eyebrow">CLAIM FOLLOW-UP</p><h2>Add ownership evidence</h2></div><button id="closeAdditionalEvidence" type="button" class="icon-button" aria-label="Close">×</button></div>
+      <p id="additionalEvidenceSummary" class="muted small-copy">The office requested more evidence for this claim.</p>
+      <label>Additional ownership evidence <span class="field-required">Required</span><textarea id="additionalEvidenceText" rows="5" required minlength="20" maxlength="1800" placeholder="Add relevant details the office can check. Never share passwords, PINs or one-time codes."></textarea></label>
+      <p id="additionalEvidenceError" class="form-error" role="alert"></p>
+      <div class="form-actions"><button id="saveAdditionalEvidenceButton" class="button button-primary" type="submit">Submit evidence</button><button id="cancelAdditionalEvidence" class="button button-quiet" type="button">Cancel</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="storageUpdateDialog" class="dialog-card">
+    <form id="storageUpdateForm" class="form-stack">
+      <div class="dialog-heading"><div><p class="eyebrow">CAMPUS INVENTORY</p><h2>Update storage location</h2></div><button id="closeStorageUpdate" type="button" class="icon-button" aria-label="Close">×</button></div>
+      <p id="storageUpdateSummary" class="muted small-copy">Update this record only after the item has physically been moved.</p>
+      <label>New physical location <span class="field-required">Required</span><input id="storageUpdateLocation" required minlength="4" maxlength="160" placeholder="Lost & Found room · cabinet A · shelf 01"></label>
+      <label>Internal move note <span class="field-optional">Optional</span><textarea id="storageUpdateNote" rows="3" maxlength="800" placeholder="Optional reason or custody note"></textarea></label>
+      <p id="storageUpdateError" class="form-error" role="alert"></p>
+      <div class="form-actions"><button id="saveStorageUpdateButton" class="button button-primary" type="submit">Save location</button><button id="cancelStorageUpdate" class="button button-quiet" type="button">Cancel</button></div>
+    </form>
+  </dialog>
+
+<dialog id="claimDialog" class="dialog-card">
     <form id="claimForm" class="form-stack">
       <div class="dialog-heading"><div><p class="eyebrow">OWNERSHIP CLAIM</p><h2>Help verify this item</h2></div><button id="closeClaim" type="button" class="icon-button" aria-label="Close">×</button></div>
       <div id="claimItemSummary" class="claim-item-summary"></div>
