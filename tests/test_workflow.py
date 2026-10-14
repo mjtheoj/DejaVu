@@ -121,6 +121,19 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.assertEqual(notifications.status_code, 200, notifications.text)
         self.assertTrue(any("possible item match" in item["title"].lower() for item in notifications.json()["notifications"]))
 
+        # The reverse order must also alert: a lost report created after intake should match items already held.
+        later_lost = self.client.post(
+            "/api/reports",
+            json=self.report_body("lost", "Navy backpack with pockets", "Navy backpack with two front pockets and a small stitched mark."),
+        )
+        self.assertEqual(later_lost.status_code, 200, later_lost.text)
+        notifications_after = self.client.get("/api/notifications")
+        match_alerts = [
+            item for item in notifications_after.json()["notifications"]
+            if "possible item match" in item["title"].lower()
+        ]
+        self.assertGreaterEqual(len(match_alerts), 2)
+
         claim_response = self.client.post(
             "/api/claims",
             json={
