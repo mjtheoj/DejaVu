@@ -95,6 +95,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
             f"/api/reports/{found_report_id}/intake",
             json={
                 "confirmed_physical_receipt": True,
+                "storage_location": "Campus Lost & Found Office - Shelf A-01",
                 "private_detail": "Tiny stitch mark on the inside left strap.",
                 "value_band": "medium",
                 "sensitivity_level": 1,
@@ -104,6 +105,13 @@ class LostLinkWorkflowTests(unittest.TestCase):
         tag_id = intake.json()["report"]["tag_id"]
         self.assertTrue(tag_id.startswith("LL-CVR-"))
         self.assertEqual(intake.json()["report"]["status"], "available")
+        self.assertEqual(intake.json()["report"]["storage_location"], "Campus Lost & Found Office - Shelf A-01")
+        move = self.client.post(
+            f"/api/reports/{found_report_id}/storage",
+            json={"storage_location": "Student Affairs Office - Cabinet B2", "note": "Moved for secured storage."},
+        )
+        self.assertEqual(move.status_code, 200, move.text)
+        self.assertEqual(move.json()["report"]["storage_location"], "Student Affairs Office - Cabinet B2")
         self.logout()
 
         # Student listings intentionally hide internal tag and verification details.
@@ -112,6 +120,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.assertEqual(browse.status_code, 200, browse.text)
         found_public = next(item for item in browse.json()["reports"] if item["id"] == found_report_id)
         self.assertNotIn("tag_id", found_public)
+        self.assertNotIn("storage_location", found_public)
         self.assertNotIn("private_verification_detail", found_public)
 
         matches = self.client.get(f"/api/reports/{lost_report_id}/matches")
