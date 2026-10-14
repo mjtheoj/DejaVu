@@ -346,7 +346,7 @@ function enterApp(user) {
   $("#roleChip").className = "role-chip" + (user.role === "office" ? " role-chip-office" : "");
   $("#officeNavButton").classList.toggle("hidden", user.role !== "office");
   $("#activityNavButton").classList.toggle("hidden", user.role === "office");
-  $('[data-view="report"], [data-view="my-reports"], [data-view="my-claims"]').forEach((button) => {
+  $$('[data-view="report"], [data-view="my-reports"], [data-view="my-claims"]').forEach((button) => {
     button.classList.toggle("hidden", user.role === "office");
   });
   $("#welcomeTitle").textContent = user.role === "office" ? "Manage found items and claims." : "Find what you are looking for.";
@@ -1290,7 +1290,7 @@ function openDecisionConfirmation(claimId, action) {
     const card = $('[data-claim-card="' + CSS.escape(claimId) + '"]');
     const level = Number(card && card.dataset.verificationLevel || 3);
     const minimum = Number(card && card.dataset.minimumChecks || ({1:2,2:3,3:4,4:4})[level] || 4);
-    const checked = card ? $('[data-verification-check]:checked', card).map((input) => input.value) : [];
+    const checked = card ? $$('[data-verification-check]:checked', card).map((input) => input.value) : [];
     let reason = "";
     if (checked.length < minimum) reason = "Select at least " + minimum + " distinct verification checks before verifying this claim.";
     else if (!checked.includes("claimant_identity")) reason = "Confirm the claimant's identity before verifying this claim.";
@@ -1351,7 +1351,7 @@ async function submitDecision(event) {
   const note = noteInput ? noteInput.value.trim() : "";
   const card = $('[data-claim-card="' + CSS.escape(claimId) + '"]');
   const verificationChecks = action === "approve" && card
-    ? $('[data-verification-check]:checked', card).map((input) => input.value)
+    ? $$('[data-verification-check]:checked', card).map((input) => input.value)
     : [];
   claimDecisionSubmitting = true;
   $("#confirmDecisionButton").disabled = true;
@@ -1403,7 +1403,7 @@ async function launchDemoAccount(email,password) {
 }
 $("#fillStudent").addEventListener("click",()=>launchDemoAccount("student@lostlink.local","student123"));
 $("#fillOffice").addEventListener("click",()=>launchDemoAccount("office@lostlink.local","office123"));
-$("[data-demo-email]").forEach(button=>button.addEventListener("click",()=>launchDemoAccount(button.dataset.demoEmail,button.dataset.demoPassword)));
+$$("[data-demo-email]").forEach(button=>button.addEventListener("click",()=>launchDemoAccount(button.dataset.demoEmail,button.dataset.demoPassword)));
 $("#viewSwitchBtn").addEventListener("click",async()=>{
  if(usingMockApi){enterApp(mockCopy(currentUser.role==="office"?MOCK_USERS.student:MOCK_USERS.office));showToast("Switched demo view. No campus records were changed by switching roles.",false);return;}
  if(!(appConfig&&appConfig.demo_mode)){showToast("Role switching is available only in the local demo. Sign in with an authorised office account to review real claims.",true);return;}
