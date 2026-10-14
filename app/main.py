@@ -212,6 +212,12 @@ def initialise_db() -> None:
                 handover_note TEXT,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS claim_verifications (
+                claim_id TEXT PRIMARY KEY REFERENCES claims(id),
+                verifier_user_id INTEGER NOT NULL REFERENCES users(id),
+                checks_json TEXT NOT NULL,
+                verified_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_reward_ledger_user_created ON reward_ledger(user_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_reports_status_type ON reports(status, report_type);
@@ -689,6 +695,7 @@ class ClaimEvidenceBody(BaseModel):
 class ClaimDecisionBody(BaseModel):
     action: Literal["approve", "reject", "request_more_evidence", "mark_disputed"]
     note: str | None = Field(default=None, max_length=800)
+    verification_checks: list[str] = Field(default_factory=list)
 
 
 class HandoverBody(BaseModel):
@@ -1126,6 +1133,22 @@ async def decide_claim(
                 raise HTTPException(status_code=409, detail="Other active claims exist. Resolve the competing claims before approving this one.")
             if report["status"] not in {"available"}:
                 raise HTTPException(status_code=409, detail="The item is not available for claim approval.")
+            allowed_checks = {
+                "distinctive_features", "date_location", "physical_inspection",
+                "supporting_evidence", "owner_specific_detail", "claimant_identity",
+                "authorised_record",
+            }
+            checked = set(body.verification_checks)
+            if checked - allowed_checks:
+                raise HTTPException(status_code=422, detail="An unknown verification check was submitted.")
+            level = int(report["verification_level"] or CATEGORY_DEFAULT_LEVEL.get(report["category"], 3))
+            minimum_checks = {1: 2, 2: 3, 3: 4, 4: 4}.get(level, 4)
+            if len(checked) < minimum_checks:
+                raise HTTPException(status_code=422, detail=f"Verification level L{level} requires at least {minimum_checks} distinct checks.")
+            if "claimant_identity" not in checked:
+                raise HTTPException(status_code=422, detail="Confirm the claimant's identity before approving the claim.")
+            if level >= 4 and "authorised_record" not in checked:
+                raise HTTPException(status_code=422, detail="Restricted items require an authorised record/custodian check.")
             new_status = "approved_for_collection"
             conn.execute("UPDATE reports SET status='claim_approved', updated_at=? WHERE id=?",
                          (now_iso(), claim["report_id"]))
@@ -1139,8 +1162,15 @@ async def decide_claim(
             """UPDATE claims SET status=?, reviewer_id=?, reviewer_note=?, updated_at=? WHERE id=?""",
             (new_status, user["id"], body.note, now_iso(), claim_id),
         )
+        if body.action == "approve":
+            conn.execute(
+                """INSERT OR REPLACE INTO claim_verifications(claim_id, verifier_user_id, checks_json, verified_at)
+                   VALUES (?, ?, ?, ?)""",
+                (claim_id, user["id"], json.dumps(sorted(checked)), now_iso()),
+            )
         audit(conn, user["id"], "claim_review_decision", "claim", claim_id,
-              {"decision": body.action, "new_status": new_status})
+              {"decision": body.action, "new_status": new_status,
+               "verification_checks": sorted(checked) if body.action == "approve" else []})
         notice_text = {
             "approve": "Your claim passed office verification. The office will complete the physical handover separately.",
             "reject": "Your claim was not approved. Contact the campus office if you believe further review is needed.",
