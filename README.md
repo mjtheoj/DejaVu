@@ -1,250 +1,502 @@
-# LostLink — AI-Assisted Campus Lost & Found
+# LostLink — Campus Lost-and-Found Workflow
 
-LostLink turns scattered lost-and-found posts into a traceable recovery workflow. Students report items and discover possible matches; authorised campus-office staff record physical custody, verify claims and confirm the final handover using the exact physical Tag ID.
+LostLink is a web application for managing campus lost property from initial report through verified physical return. Students submit lost or found reports and receive possible-match suggestions. Authorised office staff manage physical intake, item tagging and storage, private ownership-claim review, disputes and recorded handover.
 
-**Core principle:** a submitted form or a high matching score is not proof of ownership. An item is returned only after the office verification process and recorded physical handover.
+**The central rule is that a match is a lead, not proof of ownership.** A found item becomes visible for student discovery only after authorised staff confirm physical receipt and record custody. Claim approval and physical handover are separate steps; the application requires the exact physical LostLink Tag ID and identity/handover confirmations before recording a return.
 
-[Watch the 90-second jury demo](https://share.videomagic.ai/H8Kcs) · [Technical architecture](Architecture.md) · [Round 1 jury overview and Q&A](ROUND_1_JURY.md)
+> **Project status:** working standalone prototype. It uses SQLite and local image files. It has not yet been validated for production-scale load or connected to an institutional identity provider.
 
-## The problem and the solution
+## Contents
 
-Lost property is usually reported through disconnected chats, notices and informal desks. Descriptions can be vague, a genuine owner may never see the post, and a submitted claim does not establish ownership or physical return.
+- [Problem and goals](#problem-and-goals)
+- [Features](#features)
+- [End-to-end workflow](#end-to-end-workflow)
+- [Architecture](#architecture)
+- [Repository structure](#repository-structure)
+- [Matching engine](#matching-engine)
+- [Security and privacy](#security-and-privacy)
+- [HTTP API reference](#http-api-reference)
+- [Technology stack](#technology-stack)
+- [Local installation](#local-installation)
+- [Configuration](#configuration)
+- [Testing and matching evaluation](#testing-and-matching-evaluation)
+- [Limitations and production considerations](#limitations-and-production-considerations)
 
-LostLink combines structured reporting, explainable candidate matching, private ownership evidence, office-controlled intake and storage, a unique Tag ID, a handover record and verified-contribution recognition.
+## Problem and goals
 
-## What is implemented
+Lost-and-found information is often scattered across group chats, notices and informal desks. Descriptions can be incomplete, students may not see a relevant announcement, and a claim or image similarity alone cannot establish ownership. Staff also need to know where a physical item is stored and whether it was actually returned.
 
-### Student workflow
-- Submit lost-item and found-item reports with title, description, category, approximate date/time and campus location; brand, colour, visible features and a photo can add detail.
-- Search and filter available found items by text, category, block/area, room and date.
-- View item details and explainable possible-match suggestions.
-- Receive in-app report and possible-match notifications.
-- Submit private ownership evidence, track the claim status, respond to requests for more evidence and request a formal review after rejection.
-- View activity, verified reward points, leaderboard standing and prototype milestone certificates.
+LostLink brings the process into one traceable workflow:
 
-### Authorised office workflow
-- Confirm that a found item has physically arrived before it becomes publicly searchable.
-- Record its actual storage location and private verification details, then assign a unique LostLink Tag ID.
-- Update storage locations with audit history.
-- Review private claim evidence, run the risk-based verification checklist, request further evidence, reject, approve or dispute a claim.
-- Retrieve the item from its recorded location and confirm the exact physical Tag ID, claimant identity and actual handover.
-- View notifications and office summaries; record the handover and its audit event.
+1. Capture structured lost and found reports.
+2. Keep found-item listings hidden until staff confirm physical receipt.
+3. Rank possible matches and explain which recorded signals overlap.
+4. Keep claim explanations and evidence private to the claimant and authorised office staff.
+5. Track the item's Tag ID, real storage location, claim decision and physical handover.
+6. Record audit events and award contribution points only for defined verified actions.
 
-### Privacy and accountability controls
-- Public/student responses omit private Tag IDs, storage locations, ownership clues, internal verification details and private claim evidence.
-- Office-only operations are protected by server-side role checks.
-- Uploaded images are validated, orientation-corrected and re-encoded; embedded image metadata is removed.
-- Exact SHA-256 and perceptual image fingerprints help reject duplicated or near-duplicate uploaded photos. This is a deterrent, not a guarantee against screenshots or transformed images.
-- Login failures are tracked and temporarily locked after repeated invalid attempts. Session cookies use strict SameSite settings and an eight-hour lifetime; HTTPS-only cookies can be enabled for deployment.
-- Audit events track important intake, storage, claim and handover actions. Unique event keys help prevent duplicate notifications and reward awards.
+## Features
+
+### Student-facing features
+
+- Create a lost-item report or a found-item report through separate guided paths.
+- Record title, description, category, approximate occurrence time and campus location. Brand, primary colour, visible characteristics and a photo can add detail.
+- Browse and filter available found items by keywords, category, block, room and date.
+- Open item details and suggested-match explanations.
+- Receive in-app notifications about report status and possible matches.
+- Submit a claim with a private explanation and evidence categories; attach a private supporting image.
+- Track claim state, respond when more evidence is requested and request one formal review after a rejection.
+- View personal activity, verified contribution points, leaderboard information and milestone certificate PDFs.
+
+### Office-facing features
+
+- Review found-item reports awaiting physical intake.
+- Confirm actual receipt of the object before making the report available to students.
+- Record the actual room, cabinet, shelf or other storage location; capture private verification information; set value and sensitivity fields; and assign a unique LostLink Tag ID.
+- Update a stored item's location and retain the movement in the audit history.
+- Review private claim evidence and checklist results; approve, reject, request more evidence or mark a claim disputed.
+- Resolve competing claims rather than treating the first submitted claim as automatically valid.
+- Retrieve the object from the recorded location, check the exact physical Tag ID and claimant identity, confirm actual handover, and record the return.
+- Inspect office summary information and review in-app notifications.
+
+### Recognition and accountability
+
+The prototype records a reward ledger. The configured rules award 10 points when a student-submitted found item is physically received and tagged by office staff, and 5 points when an eligible verified return is recorded. Unique event keys help prevent duplicate awards. Milestone certificates are generated at configured thresholds of 20, 50 and 100 points.
+
+These are prototype recognition features; the generated certificates are not official college credentials.
 
 ## End-to-end workflow
 
-    Student reports lost item ───────────────┐
-                                            ▼
-    Student reports found item ──► Office confirms physical receipt
-                                            │
-                                            ▼
-                              Record private details and real location
-                                            │
-                                            ▼
-                                  Assign physical LostLink Tag ID
-                                            │
-                                            ▼
-                                  Item becomes available for search
-                                            │
-                                            ▼
-                                  Rank possible matches and notify
-                                            │
-                                            ▼
-                                   Student submits private evidence
-                                            │
-                                            ▼
-                                    Office verifies claim and identity
-                                            │
-                                ┌───────────┴───────────┐
-                                ▼                       ▼
-                         More evidence /             Approved
-                           dispute                    claim
-                                                        │
-                                                        ▼
-                                     Retrieve item and check exact Tag ID
-                                                        │
-                                                        ▼
-                                      Confirm physical handover and audit
+    STUDENT REPORTS LOST ITEM ───────────────────────────────┐
+                                                            │
+    STUDENT REPORTS FOUND ITEM                              │
+              │                                             │
+              ▼                                             │
+    OFFICE CONFIRMS PHYSICAL RECEIPT                        │
+              │                                             │
+              ▼                                             │
+    RECORD PRIVATE DETAILS AND ACTUAL STORAGE LOCATION     │
+              │                                             │
+              ▼                                             │
+    ASSIGN PHYSICAL LOSTLINK TAG ID                         │
+              │                                             │
+              └───────────────► AVAILABLE FOUND INVENTORY ◄─┘
+                                      │
+                                      ▼
+                           SEARCH AND RANK CANDIDATES
+                                      │
+                                      ▼
+                             STUDENT SUBMITS CLAIM
+                                      │
+                                      ▼
+                        OFFICE REVIEWS EVIDENCE AND IDENTITY
+                                      │
+                          ┌───────────┴────────────┐
+                          │                        │
+                          ▼                        ▼
+                  MORE EVIDENCE / DISPUTE       APPROVED
+                          │                        │
+                          └──────► REVIEW          ▼
+                                       RETRIEVE PHYSICAL ITEM
+                                                  │
+                                                  ▼
+                                     VERIFY EXACT TAG ID AND IDENTITY
+                                                  │
+                                                  ▼
+                                      CONFIRM ACTUAL HANDOVER
+                                                  │
+                                                  ▼
+                                       AUDIT, STATUS AND NOTIFICATIONS
 
-A found-item report starts in **Awaiting office intake** and is hidden from student search. Only after staff confirm receipt, record custody and tag the object can it enter the available-found inventory. Claim approval and physical handover are separate states.
+### Report lifecycle
+
+| Situation | Behaviour |
+|---|---|
+| Lost report is submitted | Starts as an open search record and may receive possible-match suggestions. |
+| Found report is submitted | Starts in an awaiting-intake state and is not visible in the student found-item search. |
+| Office confirms intake | Staff record actual storage and private verification details, assign a Tag ID, and make the found item available. |
+| Stored item is moved | Office staff update the location; the change is audited. |
+| Claim is created | Private evidence is linked to a claim for authorised office review. |
+| More evidence is required or a dispute exists | The claim stays in the review process; the item is not automatically released. |
+| Claim is approved | It becomes eligible for collection but is not yet marked returned. |
+| Physical handover is confirmed | The office checks the physical tag and claimant identity, records handover and marks the item returned. |
+| Student closes or withdraws an eligible report | Closure rules apply; a found item cannot be withdrawn by the student after the office has accepted physical custody. |
+
+The database uses explicit report and claim status values to enforce these transitions. The API performs validation and role checks on state-changing operations.
 
 ## Architecture
 
-    ┌──────────────────────────────────────────────────────────┐
-    │                         Client                           │
-    │               Student UI / Office UI                     │
-    │                 HTML + CSS + JavaScript                  │
-    └──────────────────────────┬───────────────────────────────┘
-                               │ HTTP requests
-                               ▼
-    ┌──────────────────────────────────────────────────────────┐
-    │                    FastAPI application                   │
-    │  Session authentication and server-side role checks      │
-    │  ├─ Auth routes                                          │
-    │  ├─ Reports, images, intake and storage routes            │
-    │  ├─ Claims, evidence, decisions, disputes and handover    │
-    │  ├─ Notifications, activity, rewards and certificates     │
-    │  ├─ Explainable matching engine                           │
-    │  └─ Report, notification and reward services              │
-    └──────────────────────────┬───────────────────────────────┘
-                               │
-                ┌──────────────┴─────────────┐
-                ▼                            ▼
-    ┌──────────────────────┐    ┌─────────────────────────────┐
-    │ SQLite database      │    │ Local image storage         │
-    │ users and reports    │    │ validated/re-encoded photos │
-    │ claims and evidence  │    │ private claim evidence      │
-    │ Tag IDs and handovers│    └─────────────────────────────┘
-    │ notifications/rewards│
-    │ audit events         │
-    └──────────────────────┘
+LostLink uses a single FastAPI application composed of route groups, shared infrastructure utilities and domain services.
 
-### Code structure
+    Browser: student and office interface
+        HTML + CSS + vanilla JavaScript
+                         │ HTTP / JSON
+                         ▼
+    FastAPI application (app/main.py)
+        ├── Session middleware and role dependencies
+        ├── Authentication routes
+        ├── Report/search/photo/intake/storage routes
+        ├── Claim/evidence/decision/dispute/handover routes
+        ├── Notification/activity/reward/certificate routes
+        ├── Matching engine
+        └── Report, notification and reward services
+                         │
+             ┌───────────┴───────────┐
+             ▼                       ▼
+    SQLite database           Local image directory
+        ├── Users                  ├── Report images
+        ├── Reports                └── Private claim evidence
+        ├── Claims
+        ├── Notifications
+        ├── Storage and Tag IDs
+        ├── Handover records
+        ├── Reward ledger
+        ├── Certificates
+        └── Audit events
 
-| Path | Responsibility |
+### Module responsibilities
+
+| Component | Responsibility |
 |---|---|
-| <code>app/main.py</code> | Creates FastAPI app, configures sessions/static files, registers routers and initialises the database |
-| <code>app/api/routes/auth.py</code> | Login, logout, current session and app configuration |
-| <code>app/api/routes/reports.py</code> | Report creation/search/closure, photos, match lookup, office intake and storage updates |
-| <code>app/api/routes/claims.py</code> | Claims, private evidence, decisions, disputes and physical handover |
-| <code>app/api/routes/engagement.py</code> | Notifications, activity, leaderboard, office summary and PDF certificates |
-| <code>app/core/database.py</code> | SQLite schema, migrations, transaction lifecycle, audit events and demo seed data |
-| <code>app/core/images.py</code> | Image validation, canonicalisation, fingerprints and watermarked previews |
-| <code>app/core/security.py</code> | Password hashing and verification |
-| <code>app/matching.py</code> | Candidate scoring, optional semantic/image similarity and match explanations |
-| <code>app/services/</code> | Report serialisation, notification logic and verified reward/certificate logic |
-| <code>app/static/</code> | Student/office interface, JavaScript and styling |
-| <code>scripts/run-jury-demo.ps1</code> | Single-terminal Windows demo launcher |
-| <code>scripts/evaluate_matching.py</code> | Labelled synthetic retrieval benchmark runner |
-| <code>tests/</code> | Matching, workflow, rewards and frontend-contract tests |
+| <code>app/main.py</code> | Creates the FastAPI application, validates the session-secret configuration, adds session middleware, mounts static assets, registers routers and initialises the database. |
+| <code>app/api/dependencies.py</code> | Resolves the current session and enforces office-role access where required. |
+| <code>app/api/routes/auth.py</code> | Login, logout, current-user and public app configuration endpoints. |
+| <code>app/api/routes/reports.py</code> | Report creation/search/closure, report photos, candidate matching, office intake and storage updates. |
+| <code>app/api/routes/claims.py</code> | Claim creation/listing, private evidence, office decisions, disputes and physical handover. |
+| <code>app/api/routes/engagement.py</code> | Notifications, activity, leaderboard, certificate downloads and office summary. |
+| <code>app/core/config.py</code> | Environment configuration, data paths, categories, sensitivity levels and workflow constants. |
+| <code>app/core/database.py</code> | SQLite connections, schema creation, additive migrations, indexes, transactions, audit writing and optional demo seeding. |
+| <code>app/core/images.py</code> | Image validation/canonicalisation, hashing, perceptual fingerprints and watermarked student previews. |
+| <code>app/core/security.py</code> | Password hashing and verification. |
+| <code>app/services/auth.py</code> | Persistent login-failure tracking and temporary lockout calculations. |
+| <code>app/services/reports.py</code> | Report serialisation, role-aware response filtering and related report helpers. |
+| <code>app/services/notifications.py</code> | In-app notifications and possible-match notification logic. |
+| <code>app/services/rewards.py</code> | Idempotent verified-contribution points, reward ledger and certificate generation. |
+| <code>app/matching.py</code> | Candidate scoring, optional ML model loading, ranking and explanation signals. |
+| <code>app/schemas.py</code> | Pydantic request models and field constraints. |
+| <code>app/static/</code> | Frontend HTML, CSS and JavaScript. |
 
-See [Architecture.md](Architecture.md) for module boundaries, API ownership and invariants.
+More implementation notes are available in [Architecture.md](Architecture.md).
 
-## Matching engine and AI models
+## Repository structure
 
-LostLink is **AI-assisted, not AI-dependent**. The default matching path is a deterministic lexical baseline and does not require a model download or external inference API.
+    DejaVu/
+    ├── .env.example
+    ├── .github/workflows/lostlink-checks.yml
+    ├── Architecture.md
+    ├── README.md
+    ├── app/
+    │   ├── main.py
+    │   ├── matching.py
+    │   ├── schemas.py
+    │   ├── api/
+    │   │   ├── dependencies.py
+    │   │   └── routes/
+    │   │       ├── auth.py
+    │   │       ├── reports.py
+    │   │       ├── claims.py
+    │   │       └── engagement.py
+    │   ├── core/
+    │   │   ├── config.py
+    │   │   ├── database.py
+    │   │   ├── images.py
+    │   │   ├── security.py
+    │   │   └── runtime.py
+    │   ├── services/
+    │   │   ├── auth.py
+    │   │   ├── reports.py
+    │   │   ├── notifications.py
+    │   │   └── rewards.py
+    │   └── static/
+    │       ├── index.html
+    │       ├── app.js
+    │       └── styles.css
+    ├── scripts/
+    │   ├── run-jury-demo.ps1
+    │   └── evaluate_matching.py
+    ├── tests/
+    │   ├── data/matching_benchmark.json
+    │   ├── test_frontend_contract.py
+    │   ├── test_matching.py
+    │   ├── test_matching_benchmark.py
+    │   ├── test_rewards.py
+    │   └── test_workflow.py
+    ├── requirements.txt
+    ├── requirements-dev.txt
+    └── requirements-ml.txt
 
-- **Lexical baseline:** normalises tokens and synonyms, then combines Jaccard overlap, Python’s <code>difflib.SequenceMatcher</code> and overlap on distinguishing terms.
-- **Structured context:** compares category, location (block/floor/room/area) and reported time when those fields are available.
-- **Optional semantic text model:** <code>sentence-transformers/all-MiniLM-L6-v2</code>, enabled with <code>USE_SEMANTIC_MODEL=true</code> after installing <code>requirements-ml.txt</code>.
-- **Optional visual model:** <code>openai/clip-vit-base-patch32</code>, enabled with <code>USE_CLIP_MODEL=true</code> and its Transformers/PyTorch dependencies installed. It can compare two images or compare an image to a report description when one photo is absent.
+The local runtime creates the <code>data/</code> directory for the SQLite database and uploaded images. This runtime data is ignored by Git.
 
-Both pretrained models are optional and disabled by default. If semantic or image inference is unavailable, LostLink can fall back to the lexical baseline. The match endpoint considers up to 500 currently available found-item candidates and returns up to five ranked suggestions; this bound is a current implementation detail, not an unlimited retrieval guarantee.
+## Matching engine
 
-### Matching evaluation
+LostLink is designed to work without an external AI service. The deterministic lexical baseline is the default; pretrained models are optional and disabled by default.
 
-The repository includes 15 manually labelled **synthetic** scenarios, each with one relevant candidate and five distractors (90 candidate pairs total). A recorded development run reported:
+### Baseline text similarity
+
+The lexical baseline:
+1. Converts text to lowercase and tokenises letters/numbers.
+2. Removes common stop words.
+3. Normalises selected synonyms, for example “backpack” and “rucksack” to “bag”, and “navy” to “blue”.
+4. Calculates Jaccard token overlap, sequence similarity using Python's <code>difflib.SequenceMatcher</code>, and overlap on selected distinguishing details such as colours, scratches, stickers, zippers, logos and cases.
+5. Combines these parts as: 55% Jaccard overlap, 30% sequence similarity and 15% distinguishing-detail overlap.
+
+This calculation is deterministic and does not require network access or model weights.
+
+### Structured signals and ranking
+
+Candidate comparison may use:
+- Description text assembled from title, description, brand, primary colour, visible features and category.
+- Category agreement.
+- Location agreement using block, floor, room and area.
+- Difference between the reported occurrence times.
+- Optional image similarity if CLIP is enabled and image files are available.
+
+When a CLIP result is available, the component weights are text 0.42, category 0.18, image 0.20, location 0.10 and time 0.10. Without an image result, text is weighted 0.50, category 0.20, location 0.15 and time 0.15. Missing location/time signals are omitted and the available component weights are normalised. These are ranking weights, not calibrated probabilities of ownership.
+
+The report matching endpoint currently retrieves up to 500 of the most recently created available found-item records, scores them in application code and returns up to five ranked candidates. This explicit candidate limit helps bound a request but means the implementation is not a full-corpus search index.
+
+### Optional pretrained models
+
+| Model | Purpose | Enablement |
+|---|---|---|
+| <code>sentence-transformers/all-MiniLM-L6-v2</code> | Creates sentence embeddings to compare the semantic similarity of report text. | Install <code>requirements-ml.txt</code> and set <code>USE_SEMANTIC_MODEL=true</code>. |
+| <code>openai/clip-vit-base-patch32</code> | Compares two item photos, or compares an available photo with the opposite report's text when only one image is present. | Install ML dependencies and set <code>USE_CLIP_MODEL=true</code>. |
+
+Semantic embeddings are compared using cosine similarity. CLIP produces visual or image-text similarity features. If an optional model cannot load or inference fails, the matcher falls back to the deterministic text baseline or omits the unavailable image signal. Optional inference consumes additional memory and CPU/GPU resources; models should not be described as active unless their flags are enabled and loading has been verified.
+
+Automatic image caption generation and keyword extraction are not implemented. CLIP similarity is not image captioning.
+
+### Synthetic retrieval benchmark
+
+The repository includes 15 manually labelled synthetic scenarios. Each scenario contains one relevant candidate and five distractors, for 90 candidate pairs.
+
+A recorded development evaluation produced the following retrieval measurements:
 
 | Metric | Lexical baseline | Sentence Transformers |
 |---|---:|---:|
-| Top-1 hit rate | 80.0% (12/15) | 93.3% (14/15) |
-| Top-3 hit rate | 100% (15/15) | 100% (15/15) |
+| Top-1 hit rate | 80.0% (12 of 15) | 93.3% (14 of 15) |
+| Top-3 hit rate | 100% (15 of 15) | 100% (15 of 15) |
 | Mean reciprocal rank | 0.8778 | 0.9667 |
 
-These are small synthetic retrieval checks, not real-campus accuracy, ownership probabilities or load-test results. Top-3 is already at the benchmark ceiling, so the semantic model did not improve that particular metric. Real deployment needs a representative, privacy-reviewed labelled campus dataset and measurement of false suggestions and missed matches.
+These measurements are a small synthetic development check—not validated real-campus accuracy, a probability that a person owns an item, or a load test. The top-3 metric is already at the benchmark's ceiling. Before operational use, matching should be evaluated on a representative, privacy-reviewed labelled campus dataset with false positives, missed matches and top-k retrieval measured separately.
+
+## Security and privacy
+
+LostLink applies prototype-level controls to keep sensitive information out of public search and maintain a record of office actions.
+
+### Authentication and authorisation
+- Passwords are stored as PBKDF2-HMAC-SHA256 hashes with random salts and 180,000 iterations.
+- Starlette session middleware signs session cookies, uses strict SameSite settings and an eight-hour maximum age.
+- Failed login attempts are tracked by email and client address. Five invalid attempts within the configured window trigger a temporary lockout.
+- Office operations are protected by server-side role checks; the frontend role selector is only a convenience for the local demo, not an identity provider.
+- Set <code>SESSION_HTTPS_ONLY=true</code> when served over HTTPS. It remains false in the local example so localhost demo cookies work.
+
+### Data minimisation and private fields
+- Public/student report serialisation omits private Tag IDs, exact storage locations, private verification details and internal risk fields.
+- Claim explanations and evidence are available only to the claimant and authorised office staff.
+- Image routes are role-aware; sensitive categories have additional student-facing image restrictions.
+- Student-facing photo responses are watermarked. Watermarks and disabled right-click/drag actions cannot prevent screenshots or access through browser developer tools, so they are deterrents rather than access controls.
+
+### Image processing and duplicate detection
+- Uploads are capped at 5 MB and must pass image validation.
+- Images are orientation-corrected, resized and re-encoded as canonical JPEGs, removing embedded image metadata.
+- Exact SHA-256 hashes and perceptual hashes help identify duplicate or near-duplicate photos.
+- Private claim evidence is stored separately from public report metadata and served through authorised endpoints.
+
+### Auditability
+Intake, storage changes, claim decisions, handovers and reward events are written into application records. Unique event keys are used to make selected side effects such as notifications and reward awards idempotent.
+
+These are prototype protections. A production system still requires a security review, HTTPS and deployment hardening, request-origin/CSRF review, managed secrets, access-controlled backups, retention policy, monitoring and a documented incident process.
+
+## HTTP API reference
+
+All API paths below are served by the FastAPI application. Endpoints that require a signed-in user need a valid session. Office actions additionally require the office role. Request payloads are validated using Pydantic models.
+
+### Authentication and configuration
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | <code>/</code> | Serve the application interface. |
+| GET | <code>/api/config</code> | Return public configuration including category/location examples and demo settings. |
+| POST | <code>/api/login</code> | Authenticate and start a session. |
+| POST | <code>/api/logout</code> | End the current session. |
+| GET | <code>/api/me</code> | Return the signed-in user's public account details. |
+
+### Reports, photos and matching
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | <code>/api/reports</code> | Search/list reports with supported filters. Student visibility is restricted to available found items except their own records; office visibility is wider. |
+| POST | <code>/api/reports</code> | Create a lost or found report. |
+| POST | <code>/api/reports/{report_id}/close</code> | Close an eligible owned lost report or withdraw a found report before intake. |
+| POST | <code>/api/reports/{report_id}/image</code> | Upload or replace a permitted report image. |
+| GET | <code>/api/reports/{report_id}/image</code> | Retrieve an image subject to role, status and category checks. |
+| GET | <code>/api/reports/{report_id}/matches</code> | Rank up to five possible matches for an owned open lost report or an office user. |
+| POST | <code>/api/reports/{report_id}/intake</code> | Office-only: confirm physical receipt, record storage/verification data and assign the Tag ID. |
+| POST | <code>/api/reports/{report_id}/storage</code> | Office-only: update the item's recorded storage location. |
+
+### Claims, evidence and handover
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | <code>/api/claims</code> | Create a claim with a private explanation and evidence categories. |
+| GET | <code>/api/claims</code> | List claims visible to the current user; office staff can review the office queue. |
+| POST | <code>/api/claims/{claim_id}/evidence</code> | Update claim evidence text. |
+| POST | <code>/api/claims/{claim_id}/evidence-image</code> | Upload private supporting evidence image. |
+| GET | <code>/api/claims/{claim_id}/evidence-image</code> | Retrieve the evidence image subject to claimant/office access rules. |
+| POST | <code>/api/claims/{claim_id}/dispute</code> | Submit an eligible claim review/dispute request. |
+| POST | <code>/api/claims/{claim_id}/decision</code> | Office-only: request more evidence, approve, reject or mark disputed, with validation of required verification checks. |
+| POST | <code>/api/claims/{claim_id}/handover</code> | Office-only: record physical handover after tag and identity confirmations. |
+
+### Notifications, activity and rewards
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | <code>/api/notifications</code> | List recent notifications and unread count for the signed-in user. |
+| POST | <code>/api/notifications/{notification_id}/read</code> | Mark one owned notification read. |
+| POST | <code>/api/notifications/read-all</code> | Mark the user's notifications read. |
+| GET | <code>/api/activity/me</code> | Return the user's activity and verified contribution summary. |
+| GET | <code>/api/leaderboard</code> | Return leaderboard information based on verified points. |
+| GET | <code>/api/certificates/{certificate_id}/download</code> | Download an eligible milestone certificate PDF. |
+| GET | <code>/api/office/summary</code> | Return the office dashboard summary. |
+
+This is a route overview, not a replacement for endpoint schema validation. The authoritative request field limits and allowed values are defined in <code>app/schemas.py</code> and the route handlers.
 
 ## Technology stack
 
-| Layer | Technology |
-|---|---|
-| API and application | Python, FastAPI, Uvicorn, Pydantic |
-| Session middleware | Starlette SessionMiddleware |
-| Prototype database | SQLite / Python <code>sqlite3</code> |
-| Images | Pillow |
-| Certificates | ReportLab |
-| Optional semantic matching | Sentence Transformers |
-| Optional image matching | Transformers, PyTorch and CLIP |
-| Frontend | HTML, CSS, vanilla JavaScript |
-| Quality checks | Python unittest, Node.js syntax check and GitHub Actions |
+| Layer | Technology | Use |
+|---|---|---|
+| Application server | Python, FastAPI and Uvicorn | API routing and application hosting. |
+| Request validation | Pydantic | Request payload validation and field length/range constraints. |
+| Browser session | Starlette SessionMiddleware | Signed cookie-based sessions. |
+| Database | SQLite and Python <code>sqlite3</code> | Prototype persistence, parameterised queries, foreign keys and transactions. |
+| Password primitives | Python <code>hashlib</code> and <code>secrets</code> | PBKDF2 password hashing and constant-time verification comparison. |
+| Image utilities | Pillow | Image verification, EXIF correction, resize/re-encoding and fingerprints. |
+| PDF certificates | ReportLab | Generate downloadable milestone certificates. |
+| Optional semantic model | Sentence Transformers | Text embeddings. |
+| Optional visual model | Transformers, PyTorch and CLIP | Image-image or image-text similarity. |
+| Frontend | HTML, CSS and vanilla JavaScript | Student and office workflows. |
+| Testing and CI | Python unittest, Node.js syntax check and GitHub Actions | Workflow, matching, rewards, frontend contract and import checks. |
 
-## Run the jury demo on Windows
+## Local installation
 
-The recommended evaluation mode is **one terminal, one server and one shared SQLite database**. Do not start separate student and office servers.
+The documented launcher is for Windows PowerShell. Python 3.11 is used in CI.
 
-### 1. Create the environment and install dependencies
+### Windows PowerShell
 
-From the repository root in PowerShell:
+Run these commands from the repository root.
 
-    py -3.11 -m venv .venv
-    .\.venv\Scripts\Activate.ps1
-    python -m pip install --upgrade pip
-    python -m pip install -r requirements.txt
-    Copy-Item .env.example .env
+1. Create a virtual environment and install runtime dependencies.
 
-### 2. Set a real session secret
+       py -3.11 -m venv .venv
+       .\.venv\Scripts\Activate.ps1
+       python -m pip install --upgrade pip
+       python -m pip install -r requirements.txt
 
-Generate a unique secret:
+2. Create the local environment file if it does not already exist.
 
-    python -c "import secrets; print(secrets.token_urlsafe(48))"
+       Copy-Item .env.example .env
 
-Open the local environment file:
+   If you already have a local <code>.env</code>, keep it rather than overwriting it.
 
-    notepad .env
+3. Generate a unique session secret.
 
-Replace the placeholder value on the <code>SESSION_SECRET=</code> line with the generated value, then save the file. Never commit <code>.env</code> or share its secret.
+       python -c "import secrets; print(secrets.token_urlsafe(48))"
 
-### 3. Start the demo
+   Open <code>.env</code> with Notepad, replace the placeholder on the <code>SESSION_SECRET=</code> line with the generated value, save the file and close the editor. Do not commit the local <code>.env</code> file.
 
-    .\scripts\run-jury-demo.ps1
+4. Start the single-server local demo.
 
-The launcher checks the environment, runs an application import preflight, starts one Uvicorn process and opens [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep the terminal open; press **Ctrl+C** to stop the server. If another server is already using port 8000, stop it before starting the demo.
+       .\scripts\run-jury-demo.ps1
 
-Demo-only accounts:
+The launcher checks the virtual-environment Python, verifies the secret, performs an import preflight, creates the local data directories and starts one Uvicorn process at <code>http://127.0.0.1:8000</code>. Keep the terminal open while using the application and press Ctrl+C to stop it. Stop any older local server that is occupying port 8000 before starting.
+
+### Linux or macOS (manual run)
+
+Create and activate a virtual environment, install dependencies, create the environment file and set a secret as described above. Then start the server manually:
+
+       python3 -m venv .venv
+       source .venv/bin/activate
+       python -m pip install --upgrade pip
+       python -m pip install -r requirements.txt
+       cp .env.example .env
+       python -c "import secrets; print(secrets.token_urlsafe(48))"
+       python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+Before launching, edit <code>.env</code> and replace the placeholder session secret. If the file already exists, do not overwrite it. The PowerShell launcher is Windows-specific; on other platforms set the environment options in <code>.env</code> and run Uvicorn directly.
+
+### Local-only demo accounts
+
+When <code>DEMO_MODE=true</code>, startup creates demonstration users and sample records. The built-in demo accounts are intended for local development only:
 
 | Role | Email | Password |
 |---|---|---|
 | Student | <code>student@lostlink.local</code> | <code>student123</code> |
 | Office staff | <code>office@lostlink.local</code> | <code>office123</code> |
 
-Use the in-app **Switch to office** / **Switch to student** control to change roles within the same browser session. Reopen or revisit the target view after switching so it fetches the latest state. The demo database persists at <code>data/lostlink.db</code> between runs; keep or reset local demo data deliberately. These credentials are for local demonstrations only. Do not expose this development server to the public internet.
+Use the in-app role-switching control to change between student and office views in the same browser session. Both roles operate against the same database. Reopen or revisit a view after switching to refresh its data. Do not use these credentials for a public deployment and do not expose the local development server to the public internet.
 
-## Tests and evaluation commands
+The prototype database defaults to <code>data/lostlink.db</code> and local images to <code>data/uploads/</code>. Those runtime files are excluded from Git.
 
-Install test dependencies:
+## Configuration
 
-    python -m pip install -r requirements-dev.txt
+Values are loaded from environment variables and the local <code>.env</code> file.
 
-Run the automated tests and source checks:
+| Variable | Purpose | Example/default behaviour |
+|---|---|---|
+| <code>DEMO_MODE</code> | Seed demo accounts and sample records. | Example file sets <code>true</code>; set <code>false</code> outside local demonstrations. |
+| <code>SESSION_SECRET</code> | Secret used to sign session cookies. | Required; startup rejects an empty or known placeholder value. Use a unique random secret. |
+| <code>SESSION_HTTPS_ONLY</code> | Restrict session cookies to HTTPS. | <code>false</code> for localhost; set <code>true</code> for HTTPS deployment. |
+| <code>DATABASE_PATH</code> | SQLite database file path. | Defaults to <code>data/lostlink.db</code>. |
+| <code>UPLOAD_DIR</code> | Directory for uploaded report images and private claim evidence. | Defaults to <code>data/uploads</code>. |
+| <code>USE_SEMANTIC_MODEL</code> | Enable semantic text embeddings. | <code>false</code> unless dependencies/model are installed and explicitly enabled. |
+| <code>SEMANTIC_MODEL</code> | Sentence Transformers model identifier. | <code>sentence-transformers/all-MiniLM-L6-v2</code>. |
+| <code>USE_CLIP_MODEL</code> | Enable CLIP-based image/image-text similarity. | <code>false</code> unless dependencies/model are installed and explicitly enabled. |
+| <code>CLIP_MODEL</code> | CLIP model identifier. | <code>openai/clip-vit-base-patch32</code>. |
 
-    python -m compileall -q app tests
-    node --check app/static/app.js
-    python -m unittest discover -s tests -v
+Keep secrets out of source control. The committed <code>.env.example</code> intentionally contains a placeholder and is not ready to use unchanged.
 
-Run the matching benchmark with the lightweight baseline:
+## Testing and matching evaluation
 
-    python scripts/evaluate_matching.py
+Install development dependencies:
 
-To test the optional semantic model, install its dependencies first:
+       python -m pip install -r requirements-dev.txt
 
-    python -m pip install -r requirements-ml.txt
-    $env:SEMANTIC_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-    python scripts/evaluate_matching.py --require-semantic-model
+Run the automated checks from the repository root:
 
-The GitHub Actions workflow compiles Python, checks JavaScript syntax, runs the test suite and imports the application. Its optional matching job attempts to load the semantic model and is marked non-blocking because external model downloads may fail in CI environments.
+       python -m compileall -q app tests
+       node --check app/static/app.js
+       python -m unittest discover -s tests -v
 
-## Current limitations and production work
+The automated suite covers workflow behaviour, matching, rewards and frontend selector/navigation contracts. GitHub Actions runs Python compilation, JavaScript syntax validation, the unit/workflow tests and application import. A separate optional job attempts semantic-model evaluation; it is non-blocking because model downloads can fail in automated environments.
 
-LostLink is a **working standalone prototype**, not a production deployment. No campus-wide user capacity, uptime or request-throughput claim has been established.
+To run the deterministic baseline retrieval evaluation:
 
-Before a real institutional rollout:
-- Replace local SQLite with an appropriately managed database such as PostgreSQL if measured concurrent writes and operational needs require it.
-- Move images from local filesystem storage to access-controlled shared/object storage when deploying more than one application instance.
-- Add managed backups, restore testing, monitoring, retention policy and incident procedures.
-- Complete a security review of sessions, request protections, upload handling, access control, logs and institutional identity.
-- Load-test realistic concurrent report, search, claim and handover workloads.
-- Evaluate the matching engine on representative labelled campus data.
-- Keep physical receipt, private evidence review, claimant identity checks and exact Tag ID handover as mandatory operational controls.
+       python scripts/evaluate_matching.py
 
-Automatic image captioning and keyword extraction are **not implemented**. CLIP similarity is not image captioning, and generated matching scores do not establish ownership.
+To request an evaluation using the actual Sentence Transformers model, install the optional model requirements and require the model to load:
 
-## Repository documents
+       python -m pip install -r requirements-ml.txt
+       python scripts/evaluate_matching.py --require-semantic-model
 
-- [Architecture.md](Architecture.md) — technical module map and architecture boundaries.
-- [ROUND_1_JURY.md](ROUND_1_JURY.md) — jury narrative, workflow diagrams, demo plan, pitch and likely questions.
+The benchmark is at <code>tests/data/matching_benchmark.json</code>. Its measurements are development data only and should not be represented as deployment accuracy.
+
+## Limitations and production considerations
+
+The current application is not a production deployment and has not been assigned a validated user-capacity or throughput claim.
+
+- **Persistence:** SQLite is suitable for the prototype. If measured concurrent writes or operational needs require it, migrate to a managed database such as PostgreSQL and review connection management, query plans, transaction boundaries and uniqueness constraints.
+- **File storage:** local images work for a single instance. Multiple instances would need shared, access-controlled object storage and a plan for private evidence retrieval.
+- **Matching scale:** retrieval currently scores a bounded set of at most 500 available found records in application code. Larger collections may require better candidate pre-filtering, a search index, cached embeddings and a separate inference worker.
+- **AI dependency:** optional model loading and image inference need memory/CPU/GPU planning. The default lexical mode should remain an explicit fallback.
+- **Institutional identity:** the current app provides standalone login and student/office roles. Institutional SSO and automated college role provisioning are not implemented.
+- **Security operations:** production requires HTTPS, secure secret management, a session/CSRF review, tested backups, data retention and deletion policy, monitoring, incident handling and a formal security review.
+- **Data governance:** private evidence and custody information need an institution-approved retention/access policy. Demonstration data should not be real student data.
+- **Matching validation:** test on a labelled, representative dataset and measure false matches and missed matches before using the system operationally.
+- **Physical custody:** the database does not use sensors to determine where an object is. Staff must physically store the item and update its recorded location.
+- **Image enrichment:** automatic image captioning and keyword generation are not implemented.
+
+## Related documentation
+
+- [Architecture.md](Architecture.md) — module boundaries, request flow and implementation invariants.
+
