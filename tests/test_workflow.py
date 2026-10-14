@@ -620,6 +620,43 @@ class LostLinkWorkflowTests(unittest.TestCase):
         staff_preview = self.client.get(f"/api/claims/{claim_id}/evidence-image")
         self.assertEqual(staff_preview.status_code, 200)
 
+    def test_claim_decision_rejects_student_and_accepts_office_checklist(self):
+        # Exercise the same endpoint called by the office's Verify claim button.
+        self.login("finder@example.test", "finder-password")
+        found = self.client.post("/api/reports", json=self.report_body("found", "Grey backpack", "Grey backpack with two small front pockets."))
+        self.assertEqual(found.status_code, 200, found.text)
+        report_id = found.json()["report"]["id"]
+        intake = self.client.post(f"/api/reports/{report_id}/intake", json={
+            "confirmed_physical_receipt": True, "storage_location": "Office shelf B-02",
+            "private_detail": "Small fabric loop inside.", "value_band": "medium", "sensitivity_level": 1
+        })
+        self.assertEqual(intake.status_code, 200, intake.text)
+        self.logout()
+        self.login("claimant@example.test", "claimant-password")
+        claim = self.client.post("/api/claims", json={
+            "report_id": report_id,
+            "evidence": "I can identify a fabric loop inside this backpack and provide a dated purchase receipt.",
+            "evidence_types": ["distinctive_features", "purchase_or_receipt"]
+        })
+        self.assertEqual(claim.status_code, 200, claim.text)
+        claim_id = claim.json()["claim"]["id"]
+        forbidden = self.client.post(f"/api/claims/{claim_id}/decision", json={
+            "action": "approve", "verification_checks": ["distinctive_features", "date_location", "claimant_identity"]
+        })
+        self.assertEqual(forbidden.status_code, 403, forbidden.text)
+        self.logout()
+        self.login("office@example.test", "office-password")
+        too_few = self.client.post(f"/api/claims/{claim_id}/decision", json={
+            "action": "approve", "verification_checks": ["distinctive_features", "claimant_identity"]
+        })
+        self.assertEqual(too_few.status_code, 422, too_few.text)
+        accepted = self.client.post(f"/api/claims/{claim_id}/decision", json={
+            "action": "approve", "note": "Identity and physical item checked.",
+            "verification_checks": ["distinctive_features", "physical_inspection", "claimant_identity"]
+        })
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        self.assertEqual(accepted.json()["claim"]["status"], "approved_for_collection")
+
     def test_demo_mode_creates_independent_student_logins(self):
         self.set_demo_mode(True)
         main.initialise_db()

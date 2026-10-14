@@ -3,9 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#102c2a">
+  <meta name="theme-color" content="#eef2f7">
   <meta name="description" content="LostLink campus lost and found reporting and claim verification prototype.">
   <title>LostLink · Campus Lost & Found</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -41,6 +44,7 @@
         <button class="button button-primary button-full" type="submit">Sign in <span aria-hidden="true">↗</span></button>
         <p id="loginError" class="form-error" role="alert"></p>
       </form>
+      <button id="returnToDashboardButton" class="button button-quiet button-full hidden" type="button">Return to dashboard</button>
       <div id="demoAccess" class="demo-access hidden">
         <div class="divider-label"><span></span><small>LOCAL DEMO ACCOUNTS</small><span></span></div>
         <button id="fillStudent" class="demo-account" type="button"><span class="avatar avatar-student">S</span><span><strong>Student 1 · Demo Student</strong><small>Report, search and submit claims</small></span><span class="arrow">→</span></button>
@@ -59,7 +63,9 @@
       <a class="brand-lockup compact" href="/" aria-label="LostLink home"><span class="brand-mark">LL</span><span><strong>LostLink</strong><small>Campus lost & found</small></span></a>
       <div class="header-right">
         <span id="roleChip" class="role-chip">Student</span>
-        <div class="user-menu"><span id="userInitial" class="avatar avatar-student">S</span><span id="userName" class="user-name">Demo Student</span></div>
+        <div class="user-menu"><span id="userInitial" class="avatar avatar-student">A</span><span id="userName" class="user-name">Alex Chen</span></div>
+        <button id="viewSwitchBtn" class="button button-primary button-small" type="button">Switch to office</button>
+        <button id="showLoginButton" class="button button-quiet button-small" type="button">Login screen</button>
         <button id="logoutButton" class="button button-quiet button-small" type="button">Sign out</button>
       </div>
     </header>
@@ -74,16 +80,17 @@
     </section>
 
     <nav id="studentNav" class="tab-nav" aria-label="LostLink sections">
-      <button class="tab-button active" type="button" data-view="browse"><span>⌕</span> Browse items</button>
-      <button class="tab-button" type="button" data-view="report"><span>＋</span> New report</button>
-      <button class="tab-button" type="button" data-view="my-reports"><span>▤</span> My reports</button>
-      <button class="tab-button" type="button" data-view="my-claims"><span>◷</span> My claims <span id="claimNavCount" class="nav-count hidden">0</span></button>
-      <button class="tab-button" type="button" data-view="notifications"><span>♧</span> Notifications <span id="notificationNavCount" class="nav-count hidden">0</span></button>
-      <button id="activityNavButton" class="tab-button" type="button" data-view="activity"><span>✦</span> Activity & certificates</button>
-      <button id="officeNavButton" class="tab-button office-tab hidden" type="button" data-view="office"><span>▦</span> Office console</button>
+      <button class="tab-button active" type="button" data-view="browse"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4.5 4.5"></path></svg> Browse items</button>
+      <button class="tab-button" type="button" data-view="report"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg> New report</button>
+      <button class="tab-button" type="button" data-view="my-reports"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.8h7l4 4V20H7z"></path><path d="M14 4v4h4M10 13h5M10 16.5h5"></path></svg> My reports</button>
+      <button class="tab-button" type="button" data-view="my-claims"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.7-3 7.7-7 10-4-2.3-7-5.3-7-10V6z"></path><path d="m9 12 2 2 4-4"></path></svg> My claims <span id="claimNavCount" class="nav-count hidden">0</span></button>
+      <button class="tab-button" type="button" data-view="notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path></svg> Notifications <span id="notificationNavCount" class="nav-count hidden">0</span></button>
+      <button id="activityNavButton" class="tab-button" type="button" data-view="activity"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="5"></circle><path d="m8 12-1 9 5-3 5 3-1-9"></path></svg> Activity & certificates</button>
+      <button id="officeNavButton" class="tab-button office-tab hidden" type="button" data-view="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg> Office console</button>
     </nav>
 
     <section id="notice" class="notice hidden" role="status"></section>
+    <div id="appModeNote" class="app-mode-note hidden" role="status">Offline preview: changes stay in this browser session and are not saved to the campus database.</div>
 
     <section id="browseView" class="content-view">
       <div class="section-heading">
