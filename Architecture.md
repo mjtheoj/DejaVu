@@ -78,3 +78,8 @@ app/core/runtime.py currently re-exports existing imports so the frontend/API be
 ## Not implemented
 
 Automatic image captioning and keyword generation are not implemented. They should be added as a separate image-enrichment service integrated with report photo uploads and search indexing, while keeping AI-generated text distinct from user-written descriptions and private claim evidence.
+
+
+## Matching evaluation
+
+`tests/data/matching_benchmark.json` contains 15 manually labelled synthetic retrieval scenarios with one relevant candidate and five distractors per query. `scripts/evaluate_matching.py` reports top-1/top-3 hit rates and mean reciprocal rank for the lexical baseline, then for Sentence Transformers if its model loads. These figures are a development sanity check only; they do not estimate performance on real campus reports.

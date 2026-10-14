@@ -57,7 +57,7 @@ The intended integration is to use college-approved institutional authentication
 | Recognition | ReportLab-generated milestone PDF certificates |
 | Quality checks | Python unit/workflow tests, HTML/JavaScript selector-contract tests, JavaScript syntax check and GitHub Actions CI |
 
-The default matcher is a lightweight, reproducible baseline. Pretrained semantic/image models are optional and must be explicitly installed and enabled. Similarity scores are not ownership probabilities, and model-based accuracy should not be claimed without evaluation against labelled campus data.
+The default matcher is a lightweight, reproducible baseline. Pretrained semantic/image models are optional and must be explicitly installed and enabled. Similarity scores are not ownership probabilities. The repository includes a 15-query synthetic labelled benchmark at [tests/data/matching_benchmark.json](tests/data/matching_benchmark.json) and an evaluator at [scripts/evaluate_matching.py](scripts/evaluate_matching.py). The CI matching-evaluation job compares baseline and Sentence Transformers top-3 hit rates when the optional model loads; this is a synthetic development measurement, not campus-ground-truth accuracy.
 
 SQLite and local file storage are suitable for prototype evaluation, not a claim of production readiness. A Campus Sync deployment should use college-approved hosting, institutional authentication, managed backups and retention rules, secure image/object storage, monitoring and a reviewed database/concurrency design.
 

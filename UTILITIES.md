@@ -44,3 +44,8 @@ DEMO_MODE=true seeds demonstration users and reports; turn it off outside local 
 ## Explicit limitation
 
 Automatic image captioning and keyword extraction are not in the current implementation. Image utilities validate/fingerprint images, while optional CLIP compares images; neither creates a textual description for a short student report. This should be implemented as a separate image-enrichment service whose generated terms stay distinct from user-entered descriptions and private claim evidence.
+
+
+## Measure matching quality
+
+Run `python scripts/evaluate_matching.py` for baseline numbers. After installing `requirements-ml.txt`, run `USE_SEMANTIC_MODEL=true python scripts/evaluate_matching.py --require-semantic-model` to require a real Sentence Transformers model load. The fixture is synthetic and manually labelled, not real campus ground truth.

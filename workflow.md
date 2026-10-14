@@ -100,3 +100,8 @@ Routes include /api/notifications, /api/activity/me, /api/leaderboard, /api/cert
 | Office | intake, storage and GET /api/office/summary |
 | Claims | create/list, evidence upload/read/update, dispute, decision and handover |
 | Engagement | notifications, activity, leaderboard and certificate download |
+
+
+## Matching evaluation
+
+The CI `matching-evaluation` job installs the optional semantic dependency and tries to run `scripts/evaluate_matching.py --require-semantic-model`. It prints baseline and semantic top-1/top-3 hit rates for 15 synthetic labelled queries. The job is allowed to fail independently if model installation/download is unavailable; no semantic hit rate is claimed unless the evaluator confirms the model actually loaded.
