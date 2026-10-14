@@ -302,12 +302,15 @@ async function loadMyReports() {
       const matchButton = report.report_type === "lost" && report.status === "open"
         ? '<button class="button button-primary button-small" type="button" data-matches="' + escapeHTML(report.id) + '">Find possible matches</button>'
         : "";
-      const canClose = (report.report_type === "lost" && report.status === "open") ||
+      const canClose = (report.report_type === "lost" && report.status === "open" && !report.has_active_linked_claim) ||
         (report.report_type === "found" && report.status === "awaiting_intake");
       const closeButton = canClose
         ? '<button class="button button-quiet button-small" type="button" data-close-report="' + escapeHTML(report.id) +
           '" data-close-type="' + escapeHTML(report.report_type) + '">' +
           (report.report_type === "found" ? "Withdraw report" : "Close report") + '</button>'
+        : "";
+      const linkedClaimNote = report.report_type === "lost" && report.status === "open" && report.has_active_linked_claim
+        ? '<p class="field-hint">This lost report is linked to a claim under review. Resolve the claim before closing the report.</p>'
         : "";
       const type = report.report_type === "lost" ? "Lost report" : "Found report";
       const imageNote = report.report_type === "found" && report.status === "awaiting_intake"
@@ -326,6 +329,7 @@ async function loadMyReports() {
         escapeHTML(statusLabel(report.status)) + "</span></div><p>" + escapeHTML(report.description) + "</p>" + extra +
         '<div class="list-card-meta"><span>⌖ ' + escapeHTML(report.location) + "</span><span>◷ " + escapeHTML(humanDate(report.occurred_at)) + "</span></div>" +
         (imageNote ? '<p class="field-hint">' + escapeHTML(imageNote) + "</p>" : "") +
+        linkedClaimNote +
         '<div class="card-actions">' + matchButton + closeButton + "</div></article>";
     }).join("");
     $("#myReportsEmpty").classList.toggle("hidden", data.reports.length > 0);
