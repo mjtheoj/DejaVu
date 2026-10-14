@@ -868,7 +868,18 @@ async def list_reports(
     sql += " ORDER BY r.created_at DESC LIMIT 250"
     with connect_db() as conn:
         rows = conn.execute(sql, params).fetchall()
-    return {"reports": [serialise_report(row, internal=internal) for row in rows]}
+        reports = []
+        for row in rows:
+            report_data = serialise_report(row, internal=internal)
+            if row["report_type"] == "lost" and int(row["created_by"]) == int(user["id"]):
+                active_claim = conn.execute(
+                    """SELECT 1 FROM claims WHERE lost_report_id=?
+                       AND status IN ('pending','disputed','needs_more_evidence','approved_for_collection') LIMIT 1""",
+                    (row["id"],),
+                ).fetchone()
+                report_data["has_active_linked_claim"] = active_claim is not None
+            reports.append(report_data)
+    return {"reports": reports}
 
 
 @app.post("/api/reports")
