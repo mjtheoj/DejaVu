@@ -1403,6 +1403,8 @@ async def upload_claim_evidence_image(
         raise HTTPException(status_code=413, detail="Evidence images must be 5 MB or smaller.")
     normalized, image_sha256, image_phash = canonicalise_image(raw)
     with connect_db() as conn:
+        # Serialize duplicate checks across simultaneous student and office demo processes.
+        conn.execute("BEGIN IMMEDIATE")
         claim = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
         if not claim or claim["claimant_id"] != user["id"]:
             raise HTTPException(status_code=404, detail="Claim not found.")
