@@ -1,27 +1,62 @@
 # DejaVu · LostLink
 
-LostLink is a focused campus lost-and-found prototype for the first five Campus Solve outcomes: structured lost/found reports, optional photos, search and filters, AI-assisted candidate ranking, and explanations. It also includes office-side physical intake, internal tag assignment, and claim verification so the first five outcomes can be demonstrated against a realistic workflow.
+LostLink is a campus lost-and-found prototype. It supports structured reports, optional photos, search and filtering, explainable candidate matching, office-confirmed physical intake, private claim review, in-app notifications, return tracking, and verified-contribution rewards.
 
-This is a standalone prototype. It is not connected to the official CVR College of Engineering Android app or its identity system.
+It is a standalone prototype, not a live integration with the official CVR College of Engineering Android app or its identity system.
 
-## Scope in this version
+## Student workflow
 
-- Student: submit lost/found reports, optionally attach an image, search office-held found items, see possible matches for their own lost reports, submit private claims, and see their claim status.
-- Office: confirm physical receipt of a found item, assign a physical tag ID, record private verification information and risk inputs, and approve, reject, dispute, or request more evidence for claims.
-- Privacy boundary: students receive public references, a public item description and a status. Physical tag IDs, private verification details, value bands, sensitivity levels, verification levels and claim evidence are only returned to the authorised office role. Claimants can see their own claim status but not the office's private notes.
-- The app stops at the verification decision. It does not record physical collection, send notifications, integrate with Campus Sync, or connect to college login.
+1. Submit a lost or found report with description, category, date, block, floor, room/area and an optional photo.
+2. Search office-held found items by keyword, category, block/area, room and date range.
+3. Open possible matches for a lost report. Explanations use the available text, category, date, location and optional image signals.
+4. Submit private evidence for a found-item claim and track the review status.
+5. View in-app notifications, verified activity points and milestone certificates.
 
-## Run locally
+Found reports remain unavailable in public search until office staff physically receive the item and assign a tag. Public records do not expose physical tag IDs, private verification details, estimated value bands, verification levels or raw matching scores.
+
+## Office workflow
+
+1. Review found reports awaiting physical intake.
+2. Confirm physical receipt, record a private identifying detail or approved verification method, set internal value/sensitivity inputs, and assign a unique LostLink physical tag.
+3. Review private claim evidence. Resolve competing/disputed claims before approval.
+4. Approve, reject, request additional evidence or place a claim on hold.
+5. For an approved claim, compare the physical item's tag ID, check the claimant's identity and confirm the physical handover. The app records the handover and closes the claim.
+
+The AI ranker suggests candidates only; it does not prove ownership or approve a claim.
+
+## Verified contribution points and certificates
+
+Points are awarded only for auditable office-confirmed events. Submitting a form alone earns no points.
+
+- +10 points when the campus office physically receives and tags a student-submitted found item.
+- +5 points when the office records a verified return after an approved claim.
+- Duplicate event keys are ignored, so repeating the same API request cannot award points twice.
+
+Milestone certificates are issued once per student and can be downloaded as PDFs:
+
+- **Verified Finder:** 20 points
+- **Campus Helper:** 50 points
+- **Community Champion:** 100 points
+
+Certificate downloads state that they are prototype recognition documents and are not official CVR College credentials. Official branding or institutional recognition requires college approval.
+
+## Notifications
+
+The app creates in-app notifications for possible matches, found-item intake, claim submission/review, additional evidence requests, handover completion, points and certificate milestones. Users can see and mark only their own notifications as read. Notifications are not email, SMS or push notifications.
+
+## Matching modes
+
+The default engine is a deterministic text baseline combined with category, location and date signals. It is intended as a reproducible baseline, not a learned semantic model.
+
+Optional pretrained modes can be enabled after installing the ML dependencies:
+
+    pip install -r requirements-ml.txt
+
+Set USE_SEMANTIC_MODEL=true for Sentence Transformers semantic text embeddings, and/or USE_CLIP_MODEL=true for optional image/image or image/text similarity. The first model load may download weights and require additional disk space, RAM and startup time. Confirm which mode actually loads before describing a demo as model-based. Missing or failed model loads fall back to the lightweight baseline. Similarity is not a probability of ownership.
+
+## Run locally on Windows
 
 Python 3.10 or later is recommended.
-
-1. Create and activate a virtual environment.
-2. Install dependencies: pip install -r requirements.txt
-3. Copy .env.example to .env.
-4. Start the app from the repository root: python -m uvicorn app.main:app --reload
-5. Open http://127.0.0.1:8000.
-
-On Windows PowerShell, the usual setup commands are:
 
     py -m venv .venv
     .venv\Scripts\Activate.ps1
@@ -29,43 +64,30 @@ On Windows PowerShell, the usual setup commands are:
     Copy-Item .env.example .env
     python -m uvicorn app.main:app --reload
 
-When DEMO_MODE=true, the local app seeds sample records and these demo accounts:
+Open http://127.0.0.1:8000.
+
+When DEMO_MODE=true, local sample data and demo accounts are available:
 
 - Student: student@lostlink.local / student123
 - Office: office@lostlink.local / office123
 
-Demo credentials are for local evaluation only. Do not expose a demo-mode server to the public internet. Set a strong random session secret before any shared deployment. For a real campus launch, replace the demo login with an approved authentication integration and review all access controls.
-
-SQLite data and uploaded, metadata-stripped JPEG images are stored under the local data/ directory. That directory is ignored by Git.
-
-## Matching behaviour
-
-The default mode uses a deterministic text baseline with category, location and date signals. It is useful for local development and a comparison baseline, but it is not a learned semantic model. The explanation is generated from the actual signals used by the ranker. Similarity scores are never treated as ownership proof.
-
-For semantic text embeddings and optional image/text similarity, install the additional model dependencies:
-
-    pip install -r requirements-ml.txt
-
-Then set USE_SEMANTIC_MODEL=true and/or USE_CLIP_MODEL=true in .env. The first model load may download pretrained weights and can require significant disk space, RAM and startup time. If a model is unavailable, the matcher falls back to the lightweight text baseline; verify which mode actually loaded before presenting results as model-based. Photo uploads remain optional in every mode.
-
-## Verification policy
-
-The office sets private category/risk information at physical intake. The effective level is raised by the configured category default, high estimated value, and sensitivity level. The exact thresholds are an initial prototype policy and must be approved by the college before production use. Conflicting claims must be resolved before approval. AI ranking does not approve ownership automatically.
-
-Found reports remain hidden from the public browse list until office staff confirm physical receipt and assign a tag. The physical tag ID is an internal inventory identifier, not proof of ownership. Sensitive categories have limited public location/image disclosure.
+These credentials are for local evaluation only. Do not expose a demo-mode server to the public internet. Set a strong random session secret before any shared deployment. SQLite data and uploaded images live under the local data/ directory, which is ignored by Git.
 
 ## Tests
 
-Run the matching unit tests with:
+Install test dependencies and run the full unit and workflow tests:
 
-    python -m unittest discover -s tests
+    pip install -r requirements-dev.txt
+    python -m unittest discover -s tests -v
 
-## Before any real deployment
+The GitHub Actions workflow also compiles Python, checks JavaScript syntax, runs tests and imports the application.
 
-- Replace sample blocks/floors with the verified campus directory.
-- Integrate an approved college authentication method.
-- Review privacy, retention, image access, session handling and office permissions.
-- Configure HTTPS, a strong session secret, backups and operational logging.
-- Add rate limits, CSRF protection appropriate to the deployment, and institutional policy for restricted items.
-- Evaluate matching on a labelled local dataset; never publish unmeasured accuracy claims.
-- Add notifications and physical handover only through the team's agreed API contracts.
+## Integration and production requirements
+
+- Replace the prototype block/floor/room options with the verified campus directory.
+- Obtain an approved integration point and authentication contract before linking to the official CVR Android app.
+- Replace demo login with institutional authentication.
+- Review role permissions, privacy, retention, upload controls, rate limiting, CSRF protection and operational logging.
+- Configure HTTPS, a strong session secret, data backups and controlled office access.
+- Approve reward policy, point thresholds and certificate language with the college before institutional use.
+- Evaluate matching against a labelled dataset and keyword baseline; do not publish unmeasured accuracy claims.
