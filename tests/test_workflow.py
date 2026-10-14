@@ -165,6 +165,11 @@ class LostLinkWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(active_close.status_code, 409)
         self.assertIn("claim under review", active_close.json()["detail"])
+        active_lost = next(
+            item for item in self.client.get("/api/reports?mine=true&report_type=lost").json()["reports"]
+            if item["id"] == lost_report_id
+        )
+        self.assertTrue(active_lost["has_active_linked_claim"])
         self.logout()
 
         self.login("office@example.test", "office-password")
@@ -254,6 +259,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
             if item["id"] == lost_report_id
         )
         self.assertEqual(closed_lost["status"], "closed")
+        self.assertFalse(closed_lost["has_active_linked_claim"])
         self.assertNotIn("reviewer_note", own_claim)
         self.assertNotIn("evidence", own_claim)
 
