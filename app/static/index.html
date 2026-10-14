@@ -196,8 +196,9 @@
     <form id="claimForm" class="form-stack">
       <div class="dialog-heading"><div><p class="eyebrow">OWNERSHIP CLAIM</p><h2>Help verify this item</h2></div><button id="closeClaim" type="button" class="icon-button" aria-label="Close">×</button></div>
       <div id="claimItemSummary" class="claim-item-summary"></div>
+      <label>Link to your lost report <span class="field-optional">Optional</span><select id="claimLostReport"><option value="">No linked lost report</option></select><small class="field-hint">If this claim is approved and the item is physically returned, the linked lost report will be closed automatically.</small></label>
       <p class="muted small-copy">Explain details that can establish ownership. This response is private and will be reviewed by authorised office staff. Never share passwords, PINs or one-time codes.</p>
-      <label>Ownership evidence<textarea id="claimEvidence" rows="5" required minlength="20" maxlength="1800" placeholder="Describe distinctive features or other evidence that only the owner should know."></textarea></label>
+      <label>Ownership evidence <span class="field-required">Required</span><textarea id="claimEvidence" rows="5" required minlength="20" maxlength="1800" placeholder="Describe distinctive features or other evidence that only the owner should know."></textarea></label>
       <p id="claimError" class="form-error" role="alert"></p>
       <div class="form-actions"><button class="button button-primary" type="submit">Submit private claim</button><button id="cancelClaim" class="button button-quiet" type="button">Cancel</button></div>
     </form>
