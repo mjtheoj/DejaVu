@@ -486,6 +486,41 @@ async function loadMyClaims() {
   } catch (error) { showToast(error.message, true); }
 }
 
+async function openItemDetails(reportId) {
+  let report = findReportById(reportId);
+  if (!report) {
+    showToast("Item details are not loaded yet. Refresh the search or reopen the match list.", true);
+    return;
+  }
+  selectedDetailsReportId = report.id;
+  $("#itemDetailsTitle").textContent = report.title || "Item details";
+  const facts = [
+    ["Reference", report.public_ref],
+    ["Category", report.category_label || categoryLabel(report.category)],
+    ["Status", statusLabel(report.status)],
+    ["Location", report.location || "Not specified"],
+    ["Approximate date", humanDateTime(report.occurred_at)],
+    ["Brand / make", report.brand],
+    ["Main colour", report.primary_color],
+    ["Visible characteristics", report.visible_features],
+    ["Record updated", humanDateTime(report.updated_at)]
+  ].filter((fact) => fact[1]);
+  const photo = report.image_url
+    ? '<div class="item-detail-photo-wrap"><img class="item-detail-photo" src="' + escapeHTML(report.image_url) + '" alt="Watermarked item preview" draggable="false"><small>Watermarked preview · public item details only</small></div>'
+    : "";
+  const matchDetails = report.match_reasons && report.match_reasons.length
+    ? '<section class="match-detail-block"><h3>Why it was suggested</h3><p class="muted">These are comparison signals, not proof of ownership.</p><ul class="reason-list">' +
+      report.match_reasons.map((reason) => "<li>" + escapeHTML(reason) + "</li>").join("") + '</ul><span class="strength-pill strength-' + escapeHTML(report.match_strength || "moderate") + '">' +
+      escapeHTML(report.match_strength || "Possible") + " match</span></section>"
+    : "";
+  $("#itemDetailsContent").innerHTML = photo + '<p class="item-detail-description">' + escapeHTML(report.description || "") + '</p><dl class="item-detail-grid">' +
+    facts.map(([key, value]) => '<div><dt>' + escapeHTML(key) + '</dt><dd>' + escapeHTML(value) + '</dd></div>').join("") +
+    '</dl>' + matchDetails + '<p class="field-hint">Keep hidden marks, serial numbers and access codes private. Ownership is verified separately by office staff.</p>';
+  const canClaim = currentUser && currentUser.role === "student" && report.report_type === "found" && report.status === "available";
+  $("#itemDetailsClaimButton").classList.toggle("hidden", !canClaim);
+  $("#itemDetailsDialog").showModal();
+}
+
 function openClaim(reportId) {
   const report = findReportById(reportId);
   if (!report) {
@@ -558,6 +593,12 @@ async function submitClaim(event) {
   event.preventDefault();
   if (!selectedClaimReport || claimSubmitting) return;
   $("#claimError").textContent = "";
+  const evidenceTypes = $$('input[name="claimEvidenceType"]:checked').map((input) => input.value);
+  if (!evidenceTypes.length) {
+    $("#claimError").textContent = "Select at least one kind of evidence before submitting.";
+    return;
+  }
+  const evidenceImage = $("#claimEvidenceImage").files[0];
   claimSubmitting = true;
   $("#claimSubmitButton").disabled = true;
   try {
@@ -566,11 +607,25 @@ async function submitClaim(event) {
       body: {
         report_id: selectedClaimReport.id,
         lost_report_id: $("#claimLostReport").value || null,
-        evidence: $("#claimEvidence").value.trim()
+        evidence: $("#claimEvidence").value.trim(),
+        evidence_types: evidenceTypes
       }
     });
+    let resultMessage = result.message + " Your evidence is private.";
+    let imageFailed = false;
+    if (evidenceImage) {
+      const fileBody = new FormData();
+      fileBody.append("file", evidenceImage);
+      try {
+        await api("/api/claims/" + encodeURIComponent(result.claim.id) + "/evidence-image", { method: "POST", body: fileBody });
+        resultMessage += " The supporting image was attached.";
+      } catch (uploadError) {
+        imageFailed = true;
+        resultMessage += " The text claim was saved, but the photo was rejected: " + uploadError.message;
+      }
+    }
     $("#claimDialog").close();
-    showToast(result.message + " Your evidence is private.", false);
+    showToast(resultMessage, imageFailed);
     navigate("my-claims");
   } catch (error) {
     $("#claimError").textContent = error.message;
