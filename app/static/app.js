@@ -393,10 +393,11 @@ async function submitAdditionalEvidence(claimId) {
 async function loadOffice() {
   if (!currentUser || currentUser.role !== "office") return;
   try {
-    const [summary, queueData, claimData] = await Promise.all([
+    const [summary, queueData, claimData, inventoryData] = await Promise.all([
       api("/api/office/summary"),
       api("/api/reports?report_type=found&status=awaiting_intake"),
-      api("/api/claims")
+      api("/api/claims"),
+      api("/api/reports?report_type=found")
     ]);
     $("#officeStats").innerHTML = [
       ["Awaiting intake", summary.awaiting_intake],
@@ -409,6 +410,9 @@ async function loadOffice() {
     const queue = queueData.reports.filter((report) => report.status === "awaiting_intake");
     $("#intakeQueue").innerHTML = queue.map((report) => intakeCard(report)).join("");
     $("#intakeEmpty").classList.toggle("hidden", queue.length > 0);
+    const inventory = inventoryData.reports.filter((report) => ["available", "claim_approved"].includes(report.status) && report.tag_id);
+    $("#officeInventory").innerHTML = inventory.map((report) => officeInventoryCard(report)).join("");
+    $("#officeInventoryEmpty").classList.toggle("hidden", inventory.length > 0);
     const active = claimData.claims.filter((claim) => ["pending", "disputed", "needs_more_evidence"].includes(claim.status));
     $("#officeClaims").innerHTML = active.map((claim) => officeClaimCard(claim)).join("");
     $("#officeClaimsEmpty").classList.toggle("hidden", active.length > 0);
@@ -419,6 +423,18 @@ async function loadOffice() {
   } catch (error) { showToast(error.message, true); }
 }
 
+function officeInventoryCard(report) {
+  return '<article class="list-card"><div class="list-card-head"><div><h3>' +
+    escapeHTML(report.title + " · " + report.public_ref) + '</h3><p>' +
+    escapeHTML(statusLabel(report.status)) + '</p></div><span class="status-pill status-available">In campus custody</span></div>' +
+    '<div class="internal-meta"><span>Physical tag: ' + escapeHTML(report.tag_id) +
+    '</span><span>Stored at: ' + escapeHTML(report.storage_location || "Location needs confirmation") + '</span>' +
+    '<span>Last updated: ' + escapeHTML(humanDateTime(report.updated_at)) + '</span></div>' +
+    '<div class="card-actions"><button class="button button-quiet button-small" type="button" data-storage-update="' +
+    escapeHTML(report.id) + '" data-current-location="' + escapeHTML(report.storage_location || "") +
+    '">Update storage location</button></div></article>';
+}
+
 function officeHandoverCard(claim) {
   const report = claim.report;
   return '<article class="list-card"><div class="list-card-head"><div><h3>' +
@@ -427,7 +443,7 @@ function officeHandoverCard(claim) {
     "</p></div><span class=\"" + statusClass(claim.status) + "\">Verified claim</span></div>" +
     '<div class="internal-meta"><span>Physical tag: ' + escapeHTML(report.tag_id || "Not assigned") +
     "</span><span>Verification level: " + escapeHTML(report.verification_level ? "L" + report.verification_level : "Not assigned") +
-    "</span></div><p>Before release, compare the physical item with the tag and verify the claimant under campus policy.</p>" +
+    "</span><span>Stored at: " + escapeHTML(report.storage_location || "Location needs confirmation") + "</span></div><p>Before release, compare the physical item with the tag and verify the claimant under campus policy.</p>" +
     '<div class="card-actions"><button class="button button-primary button-small" type="button" data-handover="' +
     escapeHTML(claim.id) + '" data-tag="' + escapeHTML(report.tag_id || "") + '">Confirm physical handover</button></div></article>';
 }
@@ -438,11 +454,12 @@ function intakeCard(report) {
     "<p>" + escapeHTML(report.description) + "</p><div class=\"list-card-meta\"><span>⌖ " + escapeHTML(report.location) +
     "</span><span>" + escapeHTML(categoryLabel(report.category)) + "</span></div>" +
     '<form class="intake-form" data-intake-form="' + escapeHTML(report.id) + '">' +
+    '<label class="wide">Campus storage location<input name="storage_location" required minlength="4" maxlength="160" placeholder="Lost & Found room · cabinet A · shelf 01"></label>' +
     '<label class="wide">Private identifying detail / approved verification method<textarea name="private_detail" maxlength="1200" placeholder="Not shown to students. For restricted items, describe the authorised verification method without copying unnecessary sensitive data."></textarea></label>' +
     '<label>Estimated value band<select name="value_band"><option value="unknown">Unknown</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>' +
     '<label>Sensitivity level<select name="sensitivity_level"><option value="1">1 · Routine</option><option value="2">2 · Elevated</option><option value="3">3 · Sensitive</option><option value="4">4 · Restricted</option></select></label>' +
-    '<label class="checkbox-line wide"><input type="checkbox" name="confirmed_physical_receipt" required> I confirm the physical item is in campus office custody.</label>' +
-    '<div class="wide"><button class="button button-primary button-small" type="submit">Confirm intake & assign tag</button></div></form></article>';
+    '<label class="checkbox-line wide"><input type="checkbox" name="confirmed_physical_receipt" required> I confirm the physical item is in campus office custody and has been placed at the recorded storage location.</label>' +
+    '<div class="wide"><button class="button button-primary button-small" type="submit">Confirm receipt, store & assign tag</button></div></form></article>';
 }
 
 function officeClaimCard(claim) {
@@ -492,13 +509,14 @@ async function submitIntake(event) {
   const values = new FormData(form);
   const body = {
     confirmed_physical_receipt: values.get("confirmed_physical_receipt") === "on",
+    storage_location: String(values.get("storage_location") || "").trim(),
     private_detail: String(values.get("private_detail") || "").trim() || null,
     value_band: values.get("value_band"),
     sensitivity_level: Number(values.get("sensitivity_level"))
   };
   try {
     const result = await api("/api/reports/" + encodeURIComponent(form.dataset.intakeForm) + "/intake", { method: "POST", body });
-    showToast("Item registered. Physical tag: " + result.report.tag_id, false);
+    showToast("Item received, tagged and stored at " + result.report.storage_location + " · " + result.report.tag_id, false);
     loadOffice();
   } catch (error) { showToast(error.message, true); }
 }
@@ -581,6 +599,24 @@ async function loadActivity() {
       escapeHTML(entry.points) + " pts</span></article>"
     ).join("");
     $("#activityEmpty").classList.toggle("hidden", data.ledger.length > 0);
+  } catch (error) { showToast(error.message, true); }
+}
+
+async function updateStorageLocation(reportId, currentLocation) {
+  const storageLocation = window.prompt("Enter the item's new actual campus storage location:", currentLocation || "");
+  if (storageLocation === null) return;
+  if (storageLocation.trim().length < 4) {
+    showToast("Enter a specific room, cabinet, shelf or storage area.", true);
+    return;
+  }
+  const note = window.prompt("Optional internal move / follow-up note:", "") || "";
+  try {
+    const result = await api("/api/reports/" + encodeURIComponent(reportId) + "/storage", {
+      method: "POST",
+      body: { storage_location: storageLocation.trim(), note: note.trim() || null }
+    });
+    showToast(result.message, false);
+    await loadOffice();
   } catch (error) { showToast(error.message, true); }
 }
 
@@ -687,6 +723,8 @@ document.addEventListener("click", (event) => {
   if (decision) submitDecision(decision.dataset.claimId, decision.dataset.decision);
   const handover = event.target.closest("[data-handover]");
   if (handover) submitHandover(handover.dataset.handover, handover.dataset.tag);
+  const storageUpdate = event.target.closest("[data-storage-update]");
+  if (storageUpdate) updateStorageLocation(storageUpdate.dataset.storageUpdate, storageUpdate.dataset.currentLocation);
   const notification = event.target.closest("[data-notification-read]");
   if (notification) markNotificationRead(notification.dataset.notificationRead);
   const certificate = event.target.closest("[data-certificate-download]");
