@@ -107,19 +107,25 @@
           <div class="form-section-heading"><span class="step-number">01</span><div><strong>Report details</strong><small>Start with the item and what happened.</small></div></div>
           <label>What are you reporting?<select id="reportType" name="report_type"><option value="lost">I lost an item</option><option value="found">I found an item</option></select><small class="field-hint">Found-item reports become searchable only after office staff confirm physical receipt.</small></label>
           <div class="two-columns">
-            <label>Item title<input id="reportTitle" name="title" required minlength="4" maxlength="100" placeholder="e.g. Navy backpack"></label>
-            <label>Category<select id="reportCategory" name="category" required></select></label>
+            <label>Item name <span class="field-required">Required</span><input id="reportTitle" name="title" required minlength="4" maxlength="100" placeholder="e.g. Navy backpack"></label>
+            <label>Category <span class="field-required">Required</span><select id="reportCategory" name="category" required></select></label>
           </div>
-          <label>Description<textarea id="reportDescription" name="description" rows="4" required minlength="10" maxlength="1200" placeholder="Colour, type, visible condition and other useful details"></textarea><small class="field-hint">Do not include passwords, PINs, identity numbers or the unique private detail you will use to prove ownership.</small></label>
-          <label>Approximate date and time<input id="reportDate" name="occurred_at" type="datetime-local"></label>
+          <label>Description <span class="field-required">Required</span><textarea id="reportDescription" name="description" rows="4" required minlength="10" maxlength="1200" placeholder="Item type, visible condition, size, and what makes it recognisable"></textarea><small class="field-hint">Describe public/visible details only. Keep private proof of ownership, serial numbers, access codes and unique hidden marks out of this description.</small></label>
+          <div class="form-section-heading space-top"><span class="step-number">02</span><div><strong>Additional item details</strong><small>Optional details improve search and candidate matching.</small></div></div>
+          <div class="two-columns">
+            <label>Brand / make <span class="field-optional">Optional</span><input id="reportBrand" name="brand" maxlength="80" placeholder="e.g. Wildcraft, Casio"></label>
+            <label>Main colour <span class="field-optional">Optional</span><input id="reportColor" name="primary_color" maxlength="60" placeholder="e.g. navy blue"></label>
+          </div>
+          <label>Visible characteristics <span class="field-optional">Optional</span><textarea id="reportFeatures" name="visible_features" rows="2" maxlength="400" placeholder="e.g. two front pockets, black zip, small scratch on the outside"></textarea><small class="field-hint">Only enter features that are safe to show to other students. Keep owner-only clues for the private claim process.</small></label>
+          <label>Approximate date and time <span class="field-optional">Optional</span><input id="reportDate" name="occurred_at" type="datetime-local"><small class="field-hint">Use your best estimate; leave blank if you are unsure rather than guessing.</small></label>
           <div class="form-section-heading space-top"><span class="step-number">02</span><div><strong>Where was it lost or found?</strong><small>Choose the closest known place. “Not sure” is okay.</small></div></div>
           <div class="two-columns">
-            <label>Block / building<select id="reportBlock" name="location_block"><option value="">Choose a block or area</option></select></label>
-            <label>Floor<select id="reportFloor" name="location_floor"><option value="">Not sure</option></select></label>
+            <label>Block / building <span class="field-required">Required</span><select id="reportBlock" name="location_block" required><option value="">Choose a block or area</option></select><small class="field-hint">Choose “Other / not sure” when you cannot identify the exact block.</small></label>
+            <label>Floor <span class="field-optional">Optional</span><select id="reportFloor" name="location_floor"><option value="">Not sure</option></select></label>
           </div>
           <div class="two-columns">
-            <label>Room (optional)<input id="reportRoom" name="location_room" maxlength="80" placeholder="e.g. A-102"></label>
-            <label>Nearby area<input id="reportArea" name="location_area" maxlength="120" placeholder="e.g. Library entrance"></label>
+            <label>Room <span class="field-optional">Optional</span><input id="reportRoom" name="location_room" maxlength="80" placeholder="e.g. A-102"></label>
+            <label>Nearby area <span class="field-optional">Optional</span><input id="reportArea" name="location_area" maxlength="120" placeholder="e.g. Library entrance"></label>
           </div>
           <div class="form-section-heading space-top"><span class="step-number">03</span><div><strong>Photograph (optional)</strong><small>A clear photo can help people recognise the item.</small></div></div>
           <label class="upload-box" for="reportImage"><span class="upload-symbol">↑</span><span><strong id="imageLabel">Choose a photo</strong><small>JPG, PNG or WebP · up to 5 MB</small></span><input id="reportImage" name="image" type="file" accept="image/jpeg,image/png,image/webp"></label>
@@ -158,6 +164,7 @@
     <section id="activityView" class="content-view hidden">
       <div class="section-heading"><div><p class="eyebrow">VERIFIED CONTRIBUTIONS</p><h2>Activity & certificates</h2><p class="muted">Earn recognition for found items that the campus office physically receives and verifies.</p></div><span class="count-pill">Verified activity only</span></div>
       <div id="activityOverview" class="activity-overview"></div>
+      <div class="office-section leaderboard-section"><div class="section-heading compact-heading"><div><p class="eyebrow">CAMPUS COMMUNITY</p><h3>Contribution leaderboard</h3><p class="muted">Recognises verified contributions only. Email addresses and claim details are never shown.</p></div><span id="leaderboardParticipantCount" class="count-pill">0 contributors</span></div><div id="leaderboardSummary" class="leaderboard-summary"></div><div id="leaderboardList" class="leaderboard-list"></div><div id="leaderboardEmpty" class="inline-empty hidden">No verified contributions yet. Return accepted found items to start the board.</div></div>
       <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">RECOGNITION</p><h3>Your certificates</h3><p class="muted">Download certificates issued for earned milestones. Prototype certificates are not official college credentials.</p></div></div><div id="certificateList" class="certificate-grid"></div><div id="certificateEmpty" class="inline-empty hidden">No certificates yet. A certificate is issued when you reach a verified contribution milestone.</div></div>
       <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">POINTS HISTORY</p><h3>Activity ledger</h3><p class="muted">Points are added only once for office-confirmed contribution events.</p></div></div><div id="activityLedger" class="stack-list"></div><div id="activityEmpty" class="inline-empty hidden">No verified activity points yet.</div></div>
     </section>
@@ -173,6 +180,17 @@
 
     <footer class="app-footer"><span>LostLink · Campus property assistance</span><span>Potential matches are suggestions, not proof of ownership.</span></footer>
   </main>
+
+  <dialog id="closeReportDialog" class="dialog-card">
+    <form id="closeReportForm" class="form-stack">
+      <div class="dialog-heading"><div><p class="eyebrow">REPORT LIFECYCLE</p><h2>Close lost report</h2></div><button id="closeCloseReport" type="button" class="icon-button" aria-label="Close">×</button></div>
+      <p class="muted small-copy">Close a lost report when you recovered the item elsewhere, no longer need to search, or submitted a duplicate. Closed reports stop generating match suggestions.</p>
+      <label>Reason <span class="field-required">Required</span><select id="closeReportReason" required><option value="recovered_elsewhere">I recovered the item elsewhere</option><option value="no_longer_searching">I no longer need to search</option><option value="duplicate">This is a duplicate report</option></select></label>
+      <label>Additional note <span class="field-optional">Optional</span><textarea id="closeReportNote" rows="3" maxlength="400" placeholder="Optional context for your own record"></textarea></label>
+      <p id="closeReportError" class="form-error" role="alert"></p>
+      <div class="form-actions"><button class="button button-danger" type="submit">Close report</button><button id="cancelCloseReport" class="button button-quiet" type="button">Keep it open</button></div>
+    </form>
+  </dialog>
 
   <dialog id="claimDialog" class="dialog-card">
     <form id="claimForm" class="form-stack">
