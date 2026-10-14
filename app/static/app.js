@@ -505,7 +505,7 @@ async function loadNotifications() {
     $("#notificationNavCount").classList.toggle("hidden", !data.unread_count);
     $("#notificationsList").innerHTML = data.notifications.map((item) =>
       '<article class="notification-card ' + (item.read_at ? "is-read" : "is-unread") + '">' +
-      '<div class="notification-mark">' + (item.read_at ? "✓" : "•") + "</div><div class=\\"notification-content\\"><div class=\\"notification-heading\\"><strong>" +
+      '<div class="notification-mark">' + (item.read_at ? "✓" : "•") + "</div><div class=\"notification-content\"><div class=\"notification-heading\"><strong>" +
       escapeHTML(item.title) + '</strong><span>' + escapeHTML(humanDateTime(item.created_at)) + "</span></div><p>" +
       escapeHTML(item.message) + "</p>" + (!item.read_at
         ? '<button class="button button-quiet button-small" type="button" data-notification-read="' + escapeHTML(item.id) + '">Mark read</button>'
@@ -545,7 +545,7 @@ async function loadActivity() {
       '</strong><span>total points</span></div><div class="points-symbol">✦</div><p class="muted">Points are awarded for contributions verified by the campus office.</p></div>' +
       '<div class="milestone-card"><div class="milestone-heading"><div><p class="eyebrow">NEXT MILESTONE</p><h3>' +
       escapeHTML(next ? next.tier : "Recognition complete") + '</h3></div><span class="count-pill">' +
-      escapeHTML(next ? (next.threshold + " pts") : "Complete") + "</span></div><div class=\\"progress-track\\"><span style=\\"width:" +
+      escapeHTML(next ? (next.threshold + " pts") : "Complete") + "</span></div><div class=\"progress-track\"><span style=\"width:" +
       progress + '%"></span></div><p class="muted">' + escapeHTML(nextText) + '</p><div class="point-rules"><span>+10 <small>verified office intake</small></span><span>+5 <small>verified return</small></span></div></div>';
     $("#certificateList").innerHTML = data.certificates.map((certificate) =>
       '<article class="certificate-card"><div class="certificate-emblem">✧</div><div class="certificate-copy"><span class="item-ref">' +
