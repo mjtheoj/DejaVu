@@ -546,7 +546,9 @@ async function loadActivity() {
       '<div class="milestone-card"><div class="milestone-heading"><div><p class="eyebrow">NEXT MILESTONE</p><h3>' +
       escapeHTML(next ? next.tier : "Recognition complete") + '</h3></div><span class="count-pill">' +
       escapeHTML(next ? (next.threshold + " pts") : "Complete") + "</span></div><div class=\"progress-track\"><span style=\"width:" +
-      progress + '%"></span></div><p class="muted">' + escapeHTML(nextText) + '</p><div class="point-rules"><span>+10 <small>verified office intake</small></span><span>+5 <small>verified return</small></span></div></div>';
+      progress + '%"></span></div><p class="muted">' + escapeHTML(nextText) + '</p><div class="point-rules"><span>+' +
+      escapeHTML(data.rules.verified_intake) + ' <small>verified office intake</small></span><span>+' +
+      escapeHTML(data.rules.verified_return) + ' <small>verified return</small></span></div></div>';
     $("#certificateList").innerHTML = data.certificates.map((certificate) =>
       '<article class="certificate-card"><div class="certificate-emblem">✧</div><div class="certificate-copy"><span class="item-ref">' +
       escapeHTML(certificate.serial) + "</span><h3>" + escapeHTML(certificate.tier) + '</h3><p class="muted">' +
