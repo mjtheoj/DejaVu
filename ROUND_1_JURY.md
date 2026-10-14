@@ -32,7 +32,7 @@ Manual coordination becomes harder as report volume increases. A post saying “
 
 The prototype covers student lost/found reports, optional photos, search/filtering, possible-match suggestions and explanations, in-app notifications, office-confirmed intake, Tag ID assignment, campus storage records, private claim review, dispute handling, handover tracking, reward points and milestone PDF certificates.
 
-**Scope boundary:** LostLink currently runs as a standalone web prototype. Campus Sync is the intended campus entry point, but a live Campus Sync connection, institutional SSO and production hosting have not been implemented. Integration depends on the college/platform’s approved API or SDK and authentication contract.
+**Scope boundary:** LostLink currently runs as a standalone web prototype. It is not yet deployed to production or connected to an institutional single sign-on system.
 
 ## 3. Solution at a glance
 
@@ -163,7 +163,6 @@ flowchart TB
     subgraph CLIENT["Client layer"]
       S["Student interface"]
       O["Campus office interface"]
-      CS["Campus Sync launch / SSO (planned)"]
     end
     subgraph APP["LostLink application"]
       UI["HTML + CSS + JavaScript"]
@@ -180,7 +179,6 @@ flowchart TB
     end
     S --> UI
     O --> UI
-    CS -. "Requires approved integration contract" .-> UI
     UI --> API
     API --> AUTH
     AUTH --> MATCH
@@ -215,7 +213,7 @@ The current persistence layer uses local SQLite and a local filesystem. Producti
 | Student / finder | Report found item, attach photo, track own reports, receive notifications and recognition | Cannot see private tags, exact storage, internal verification details or private claim evidence |
 | Student / claimant | Search available items, submit private evidence, track own claim | Can see own status; cannot see reviewers’ internal notes or another claimant’s evidence |
 | Authorised office staff | Confirm intake/storage, inspect private fields, review disputes, update storage, verify tag and record handover | Office operations require an office-role session |
-| Campus Sync identity provider (future) | Intended source for institutional identity/sign-in if supported and approved | Not integrated; precise role mapping/SSO depends on the approved contract |
+| Institutional identity (future) | Approved college identity and sign-in | Not integrated; production role mapping and authentication remain future work |
 
 ## 9. Rewards and certificates
 
@@ -273,7 +271,7 @@ Only confirm actions that have actually occurred in the physical demonstration. 
 
 ## 12. Suggested 60-second jury pitch
 
-> “LostLink is an AI-assisted campus lost-and-found system that makes recovery traceable from report to physical return. Students can report lost or found items, search structured records and receive explainable match suggestions. The key difference is that we do not treat a submitted form or an AI match as proof that an item is recovered. A found object becomes searchable only after campus staff physically receive it, assign a unique Tag ID and record where it is stored. When a student claims an item, authorised staff review private evidence, verify identity and resolve competing claims. At collection, the physical Tag ID must match the approved record before the handover can be closed. We also track in-app updates and reward verified contributions. The current build is a working standalone prototype; Campus Sync is our intended integration path and requires the college’s approved authentication and integration contract.”
+> “LostLink is an AI-assisted campus lost-and-found system that makes recovery traceable from report to physical return. Students can report lost or found items, search structured records and receive explainable match suggestions. The key difference is that we do not treat a submitted form or an AI match as proof that an item is recovered. A found object becomes searchable only after campus staff physically receive it, assign a unique Tag ID and record where it is stored. When a student claims an item, authorised staff review private evidence, verify identity and resolve competing claims. At collection, the physical Tag ID must match the approved record before the handover can be closed. We also track in-app updates and reward verified contributions. The current build is a working standalone prototype; production deployment requires institutional authentication, approved hosting and a security review.”
 
 ## 13. Likely jury questions
 
@@ -289,9 +287,6 @@ A. Claim evidence is private, staff review a risk-based checklist, competing act
 **Q. How will staff find an item after it is handed in?**  
 A. The office records the actual room/cabinet/shelf location and Tag ID during intake. That location can be updated after an item is moved, with the change written to the audit trail.
 
-**Q. Is it already integrated with Campus Sync?**  
-A. Not yet. The prototype is standalone. Integration is planned through the college-approved API or supported SSO/launch capability once the technical contract and deployment requirements are available.
-
 **Q. What data proves matching accuracy?**  
 A. The current prototype does not claim a validated accuracy percentage. We plan to measure matching usefulness and false suggestions against a labelled dataset of campus report pairs.
 
@@ -302,7 +297,7 @@ A. It is a working prototype with automated workflow checks, not a production de
 
 | Area | Current state | Next step before real campus use |
 |---|---|---|
-| Campus Sync | Planned integration only | Obtain API/SDK, SSO, app-launch and deployment requirements |
+| Deployment | Standalone evaluation prototype | Choose approved hosting, managed persistence, backups and operational controls |
 | Identity | Standalone prototype login and role session | Replace with approved institutional authentication and explicit office-role assignment |
 | Storage | Private location field and audit on moves | Agree actual storage rooms, custodians, label format and inventory policy |
 | Matching quality | Deterministic baseline; optional models | Build labelled data; benchmark top-k results, false positives and missed matches |
@@ -314,7 +309,7 @@ A. It is a working prototype with automated workflow checks, not a production de
 ### Recommended priorities
 
 1. **Before the jury demo:** Rehearse the end-to-end physical-custody story, use consistent sample data and demonstrate the Tag ID check.
-2. **After jury feedback:** Agree Campus Sync integration and authentication requirements with the relevant administrators.
+2. **After jury feedback:** Prioritise jury feedback and define a limited, staff-supervised campus pilot.
 3. **Before rollout:** Validate matching on labelled data, review privacy/security, define retention and operating procedures, and test with campus staff.
 
 ## 15. Closing statement
@@ -332,7 +327,7 @@ Ownership claims now combine a private explanation with selectable evidence cate
 
 Search results and suggested matches expose a **View details** panel with item reference, category, status, location, approximate date, brand/colour, visible characteristics, and (for match suggestions) the matching explanation signals. A match notification offers **View match details**, which opens the matching results for the related lost report. A match remains a lead, not proof of ownership.
 
-For the live jury walk-through, run `.`scripts/run-jury-demo.ps1` in PowerShell after installing requirements in `.venv`. The script opens student and office sessions on separate loopback hostnames/ports while sharing one local SQLite database. Use a student account to report/claim, then refresh the office portal to demonstrate intake, claim review and handover. See `LOCAL_DEVELOPMENT.md` for the local accounts and setup steps.
+For the live jury walk-through, prepare the environment using the Quick start in `README.md`, then run `scripts/run-jury-demo.ps1` in PowerShell. The script starts one server at `http://127.0.0.1:8000` and uses one SQLite database. Use the in-app **Switch to office** / **Switch to student** control to change roles in the same browser session; revisit the target view after switching so it fetches fresh records. Do not start a second server.
 
 **Image protection limitation:** public photographs are watermarked in the student-facing preview and the interface suppresses ordinary right-click/drag saving. Web browsers cannot guarantee prevention of saving, screenshots or access through browser developer tools. The meaningful control for evidence reuse is server-side exact/perceptual duplicate checking, not the UI deterrent alone.
 
