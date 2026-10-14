@@ -143,6 +143,7 @@ def initialise_db() -> None:
                 status TEXT NOT NULL,
                 created_by INTEGER NOT NULL REFERENCES users(id),
                 tag_id TEXT UNIQUE,
+                storage_location TEXT,
                 private_detail TEXT,
                 value_band TEXT NOT NULL DEFAULT 'unknown',
                 sensitivity_level INTEGER NOT NULL DEFAULT 1,
@@ -225,6 +226,14 @@ def initialise_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_claims_report ON claims(report_id, status);
             CREATE INDEX IF NOT EXISTS idx_claims_claimant ON claims(claimant_id, created_at);
             """
+        )
+        # Keep existing local databases compatible as storage tracking is introduced.
+        report_columns = {row["name"] for row in conn.execute("PRAGMA table_info(reports)").fetchall()}
+        if "storage_location" not in report_columns:
+            conn.execute("ALTER TABLE reports ADD COLUMN storage_location TEXT")
+        conn.execute(
+            "UPDATE reports SET storage_location=? WHERE tag_id IS NOT NULL AND (storage_location IS NULL OR TRIM(storage_location)='')",
+            ("Location needs confirmation",),
         )
         if not DEMO_MODE:
             return
@@ -315,6 +324,10 @@ def initialise_db() -> None:
                     item["private"], item["value"], item["sensitivity"], item["level"], now_iso(), now_iso()
                 ),
             )
+        conn.execute(
+            "UPDATE reports SET storage_location=? WHERE tag_id IS NOT NULL AND (storage_location IS NULL OR TRIM(storage_location)='')",
+            ("Demo storage · shelf A-01",),
+        )
         conn.execute(
             """INSERT INTO reports(id, public_ref, report_type, title, description, category,
                occurred_at, location_block, location_floor, location_room, location_area,
@@ -632,7 +645,7 @@ def serialise_report(row: sqlite3.Row, internal: bool = False) -> dict[str, Any]
             "value_band": row["value_band"],
             "sensitivity_level": row["sensitivity_level"],
             "verification_level": row["verification_level"],
-            "storage_location": "Campus Lost & Found Office" if row["tag_id"] else None,
+            "storage_location": row["storage_location"] if row["tag_id"] else None,
             "created_by": row["created_by"],
         })
     return result
@@ -678,9 +691,15 @@ class ReportBody(BaseModel):
 
 class IntakeBody(BaseModel):
     confirmed_physical_receipt: bool
+    storage_location: str = Field(min_length=4, max_length=160)
     private_detail: str | None = Field(default=None, max_length=1200)
     value_band: Literal["low", "medium", "high", "unknown"] = "unknown"
     sensitivity_level: int = Field(default=1, ge=1, le=4)
+
+
+class StorageLocationBody(BaseModel):
+    storage_location: str = Field(min_length=4, max_length=160)
+    note: str | None = Field(default=None, max_length=800)
 
 
 class ClaimBody(BaseModel):
@@ -950,6 +969,9 @@ async def intake_found_item(
     require_office(user)
     if not body.confirmed_physical_receipt:
         raise HTTPException(status_code=422, detail="Confirm that the physical item has been received by the office.")
+    storage_location = body.storage_location.strip()
+    if len(storage_location) < 4:
+        raise HTTPException(status_code=422, detail="Record the actual campus room, cabinet, shelf or other storage location.")
     with connect_db() as conn:
         row = read_report(conn, report_id)
         if row["report_type"] != "found" or row["status"] != "awaiting_intake":
@@ -965,13 +987,20 @@ async def intake_found_item(
         number = int(latest["tag_id"].rsplit("-", 1)[1]) + 1 if latest else 1
         tag_id = prefix + str(number).zfill(6)
         conn.execute(
-            """UPDATE reports SET status='available', tag_id=?, private_detail=?, value_band=?,
+            """UPDATE reports SET status='available', tag_id=?, storage_location=?, private_detail=?, value_band=?,
                sensitivity_level=?, verification_level=?, updated_at=? WHERE id=?""",
-            (tag_id, (body.private_detail or "").strip() or None, body.value_band,
+            (tag_id, storage_location, (body.private_detail or "").strip() or None, body.value_band,
              body.sensitivity_level, level, now_iso(), report_id),
         )
-        audit(conn, user["id"], "found_item_received_and_tagged", "report", report_id,
-              {"tag_id": tag_id, "verification_level": "L" + str(level)})
+        audit(conn, user["id"], "found_item_received_tagged_and_stored", "report", report_id,
+              {"tag_id": tag_id, "storage_location": storage_location, "verification_level": "L" + str(level)})
+        notify_user(
+            conn, row["created_by"], "found-intake:" + report_id,
+            "Found item received and stored",
+            "Campus office confirmed physical receipt, assigned tag " + tag_id +
+            " and recorded storage at " + storage_location + ". The item is now available for matching.",
+            "report", report_id,
+        )
         reporter = conn.execute("SELECT role FROM users WHERE id=?", (row["created_by"],)).fetchone()
         if reporter and reporter["role"] == "student":
             award_points(
@@ -982,7 +1011,33 @@ async def intake_found_item(
             )
         notify_possible_matches(conn, read_report(conn, report_id))
         updated = read_report(conn, report_id)
-    return {"report": serialise_report(updated, internal=True), "message": "Physical receipt recorded and tag assigned."}
+    return {"report": serialise_report(updated, internal=True), "message": "Physical receipt recorded, tag assigned and campus storage location saved."}
+
+
+@app.post("/api/reports/{report_id}/storage")
+async def update_storage_location(
+    report_id: str,
+    body: StorageLocationBody,
+    user: dict[str, Any] = Depends(authenticated_user),
+):
+    require_office(user)
+    storage_location = body.storage_location.strip()
+    if len(storage_location) < 4:
+        raise HTTPException(status_code=422, detail="Record the actual campus room, cabinet, shelf or other storage location.")
+    with connect_db() as conn:
+        report = read_report(conn, report_id)
+        if report["report_type"] != "found" or not report["tag_id"]:
+            raise HTTPException(status_code=409, detail="Only physically received and tagged found items can have a storage location.")
+        if report["status"] not in {"available", "claim_approved"}:
+            raise HTTPException(status_code=409, detail="Storage location can only be changed while the item is in campus custody.")
+        previous_location = report["storage_location"]
+        conn.execute("UPDATE reports SET storage_location=?, updated_at=? WHERE id=?",
+                     (storage_location, now_iso(), report_id))
+        audit(conn, user["id"], "storage_location_updated", "report", report_id,
+              {"tag_id": report["tag_id"], "previous_location": previous_location,
+               "new_location": storage_location, "note": (body.note or "").strip() or None})
+        updated = read_report(conn, report_id)
+    return {"report": serialise_report(updated, internal=True), "message": "Campus storage location updated."}
 
 
 @app.post("/api/claims")
