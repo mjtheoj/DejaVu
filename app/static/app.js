@@ -8,6 +8,8 @@ let selectedLostReportForMatchId = null;
 let lostReportOptionsRequest = 0;
 let reportSubmitting = false;
 let claimSubmitting = false;
+let selectedEvidenceClaimId = null;
+let selectedStorageReportId = null;
 let selectedCloseReportId = null;
 let selectedCloseReportType = null;
 
@@ -481,19 +483,41 @@ async function submitClaim(event) {
   }
 }
 
-async function submitAdditionalEvidence(claimId) {
-  const evidence = window.prompt("Add the requested ownership evidence. Do not enter passwords, PINs or one-time codes.");
-  if (!evidence || evidence.trim().length < 20) {
-    if (evidence !== null) showToast("Please enter at least 20 characters of relevant evidence.", true);
+function openAdditionalEvidence(claimId) {
+  selectedEvidenceClaimId = claimId;
+  const card = document.querySelector('[data-claim-card="' + CSS.escape(claimId) + '"]');
+  const itemTitle = card ? card.querySelector("h3").textContent : "this item";
+  $("#additionalEvidenceSummary").textContent = "Add the evidence requested for " + itemTitle + ". This response is private to you and authorised office reviewers.";
+  $("#additionalEvidenceText").value = "";
+  $("#additionalEvidenceError").textContent = "";
+  $("#saveAdditionalEvidenceButton").disabled = false;
+  $("#additionalEvidenceDialog").showModal();
+}
+
+async function submitAdditionalEvidence(event) {
+  event.preventDefault();
+  if (!selectedEvidenceClaimId) return;
+  const evidence = $("#additionalEvidenceText").value.trim();
+  if (evidence.length < 20) {
+    $("#additionalEvidenceError").textContent = "Please provide at least 20 characters of relevant evidence.";
+    $("#additionalEvidenceText").focus();
     return;
   }
+  $("#additionalEvidenceError").textContent = "";
+  $("#saveAdditionalEvidenceButton").disabled = true;
   try {
-    const result = await api("/api/claims/" + encodeURIComponent(claimId) + "/evidence", {
-      method: "POST", body: { evidence: evidence.trim() }
+    const result = await api("/api/claims/" + encodeURIComponent(selectedEvidenceClaimId) + "/evidence", {
+      method: "POST", body: { evidence }
     });
+    $("#additionalEvidenceDialog").close();
+    selectedEvidenceClaimId = null;
     showToast(result.claim.message, false);
-    loadMyClaims();
-  } catch (error) { showToast(error.message, true); }
+    await loadMyClaims();
+  } catch (error) {
+    $("#additionalEvidenceError").textContent = error.message;
+  } finally {
+    $("#saveAdditionalEvidenceButton").disabled = false;
+  }
 }
 
 async function loadOffice() {
@@ -735,22 +759,44 @@ async function loadActivity() {
   } catch (error) { showToast(error.message, true); }
 }
 
-async function updateStorageLocation(reportId, currentLocation) {
-  const storageLocation = window.prompt("Enter the item's new actual campus storage location:", currentLocation || "");
-  if (storageLocation === null) return;
-  if (storageLocation.trim().length < 4) {
-    showToast("Enter a specific room, cabinet, shelf or storage area.", true);
+function openStorageUpdate(reportId, currentLocation, itemTitle) {
+  selectedStorageReportId = reportId;
+  $("#storageUpdateSummary").textContent = itemTitle + ". Update this record only after the item has physically been moved.";
+  $("#storageUpdateLocation").value = currentLocation || "";
+  $("#storageUpdateNote").value = "";
+  $("#storageUpdateError").textContent = "";
+  $("#saveStorageUpdateButton").disabled = false;
+  $("#storageUpdateDialog").showModal();
+}
+
+async function submitStorageLocation(event) {
+  event.preventDefault();
+  if (!selectedStorageReportId) return;
+  const storageLocation = $("#storageUpdateLocation").value.trim();
+  if (storageLocation.length < 4) {
+    $("#storageUpdateError").textContent = "Enter a specific room, cabinet, shelf or storage area.";
+    $("#storageUpdateLocation").focus();
     return;
   }
-  const note = window.prompt("Optional internal move / follow-up note:", "") || "";
+  $("#storageUpdateError").textContent = "";
+  $("#saveStorageUpdateButton").disabled = true;
   try {
-    const result = await api("/api/reports/" + encodeURIComponent(reportId) + "/storage", {
+    const result = await api("/api/reports/" + encodeURIComponent(selectedStorageReportId) + "/storage", {
       method: "POST",
-      body: { storage_location: storageLocation.trim(), note: note.trim() || null }
+      body: {
+        storage_location: storageLocation,
+        note: $("#storageUpdateNote").value.trim() || null
+      }
     });
+    $("#storageUpdateDialog").close();
+    selectedStorageReportId = null;
     showToast(result.message, false);
     await loadOffice();
-  } catch (error) { showToast(error.message, true); }
+  } catch (error) {
+    $("#storageUpdateError").textContent = error.message;
+  } finally {
+    $("#saveStorageUpdateButton").disabled = false;
+  }
 }
 
 async function openCloseReport(reportId, reportType) {
@@ -902,7 +948,7 @@ document.addEventListener("click", (event) => {
   const matches = event.target.closest("[data-matches]");
   if (matches) loadMatches(matches.dataset.matches);
   const evidence = event.target.closest("[data-add-evidence]");
-  if (evidence) submitAdditionalEvidence(evidence.dataset.addEvidence);
+  if (evidence) openAdditionalEvidence(evidence.dataset.addEvidence);
   const dispute = event.target.closest("[data-dispute-claim]");
   if (dispute) submitClaimDispute(dispute.dataset.disputeClaim);
   const closeReport = event.target.closest("[data-close-report]");
@@ -912,7 +958,10 @@ document.addEventListener("click", (event) => {
   const handover = event.target.closest("[data-handover]");
   if (handover) submitHandover(handover.dataset.handover, handover.dataset.tag);
   const storageUpdate = event.target.closest("[data-storage-update]");
-  if (storageUpdate) updateStorageLocation(storageUpdate.dataset.storageUpdate, storageUpdate.dataset.currentLocation);
+  if (storageUpdate) {
+    const itemTitle = storageUpdate.closest(".list-card")?.querySelector("h3")?.textContent || "Tagged item";
+    openStorageUpdate(storageUpdate.dataset.storageUpdate, storageUpdate.dataset.currentLocation, itemTitle);
+  }
   const notification = event.target.closest("[data-notification-read]");
   if (notification) markNotificationRead(notification.dataset.notificationRead);
   const certificate = event.target.closest("[data-certificate-download]");
@@ -928,6 +977,12 @@ $("#reportImage").addEventListener("change", () => {
 });
 $("#cancelReport").addEventListener("click", () => navigate("browse"));
 $("#claimForm").addEventListener("submit", submitClaim);
+$("#additionalEvidenceForm").addEventListener("submit", submitAdditionalEvidence);
+$("#closeAdditionalEvidence").addEventListener("click", () => { $("#additionalEvidenceDialog").close(); selectedEvidenceClaimId = null; });
+$("#cancelAdditionalEvidence").addEventListener("click", () => { $("#additionalEvidenceDialog").close(); selectedEvidenceClaimId = null; });
+$("#storageUpdateForm").addEventListener("submit", submitStorageLocation);
+$("#closeStorageUpdate").addEventListener("click", () => { $("#storageUpdateDialog").close(); selectedStorageReportId = null; });
+$("#cancelStorageUpdate").addEventListener("click", () => { $("#storageUpdateDialog").close(); selectedStorageReportId = null; });
 $("#closeReportForm").addEventListener("submit", submitCloseReport);
 $("#closeCloseReport").addEventListener("click", () => { $("#closeReportDialog").close(); selectedCloseReportId = null; selectedCloseReportType = null; });
 $("#cancelCloseReport").addEventListener("click", () => { $("#closeReportDialog").close(); selectedCloseReportId = null; selectedCloseReportType = null; });
