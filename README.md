@@ -2,6 +2,12 @@
 
 LostLink is a campus lost-property workflow designed to connect student reports with physical custody, staff-reviewed ownership claims and traceable handovers. It combines structured item reports, explainable candidate matching, private verification, a tag-based campus inventory and verified-contribution recognition.
 
+## Backend documentation
+
+- [Architecture](Architecture.md) — module boundaries and dependencies.
+- [Backend workflow](workflow.md) — request lifecycle and endpoint map.
+- [Utilities and libraries](UTILITIES.md) — dependencies, standard-library utilities and optional ML components.
+
 ## Solution approach
 
 ### One workflow from report to return

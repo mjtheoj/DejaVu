@@ -7,22 +7,32 @@ from PIL import Image
 from fastapi.testclient import TestClient
 
 import app.main as main
+from app.core import config as app_config
+from app.core import database as app_database
+from app.core import runtime as app_runtime
+from app.services import notifications as app_notifications
+from app.services import reports as app_reports_service
+from app.api.routes import auth as auth_routes
+from app.api.routes import reports as reports_routes
+from app.api.routes import claims as claims_routes
+from app.api.routes import engagement as engagement_routes
 
 
 class LostLinkWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.old_db = main.DB_PATH
-        self.old_upload = main.UPLOAD_DIR
-        self.old_data = main.DATA_DIR
-        self.old_demo = main.DEMO_MODE
-
         root = Path(self.temp.name)
-        main.DATA_DIR = root
-        main.DB_PATH = root / "test.sqlite"
-        main.UPLOAD_DIR = root / "uploads"
+        self.modules = [main, app_config, app_database, app_runtime, app_notifications,
+                        app_reports_service, auth_routes, reports_routes, claims_routes, engagement_routes]
+        self.old_module_settings = {}
+        new_settings = {"DATA_DIR": root, "DB_PATH": root / "test.sqlite",
+                        "UPLOAD_DIR": root / "uploads", "DEMO_MODE": False}
+        for module in self.modules:
+            for name, value in new_settings.items():
+                if hasattr(module, name):
+                    self.old_module_settings[(module, name)] = getattr(module, name)
+                    setattr(module, name, value)
         main.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        main.DEMO_MODE = False
         main.initialise_db()
 
         with main.connect_db() as conn:
@@ -42,11 +52,15 @@ class LostLinkWorkflowTests(unittest.TestCase):
 
     def tearDown(self):
         self.client.close()
-        main.DB_PATH = self.old_db
-        main.UPLOAD_DIR = self.old_upload
-        main.DATA_DIR = self.old_data
-        main.DEMO_MODE = self.old_demo
+        for (module_name, value in self.old_module_settings.items():
+            module, name = module_name
+            setattr(module, name, value)
         self.temp.cleanup()
+
+    def set_demo_mode(self, enabled):
+        for module in self.modules:
+            if hasattr(module, "DEMO_MODE"):
+                module.DEMO_MODE = enabled
 
     def login(self, email, password):
         response = self.client.post("/api/login", json={"email": email, "password": password})
@@ -607,7 +621,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.assertEqual(staff_preview.status_code, 200)
 
     def test_demo_mode_creates_independent_student_logins(self):
-        main.DEMO_MODE = True
+        self.set_demo_mode(True)
         main.initialise_db()
         for email, password in (
             ("student2@lostlink.local", "student2123"),
@@ -618,7 +632,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual(response.json()["user"]["role"], "student")
             self.client.post("/api/logout")
-        main.DEMO_MODE = False
+        self.set_demo_mode(False)
 
 
 if __name__ == "__main__":
