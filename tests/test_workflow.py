@@ -146,9 +146,24 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.logout()
 
         self.login("office@example.test", "office-password")
-        decision = self.client.post(
+        missing_checks = self.client.post(
             f"/api/claims/{claim_id}/decision",
             json={"action": "approve", "note": "Evidence checked against the physical item."},
+        )
+        self.assertEqual(missing_checks.status_code, 422)
+
+        decision = self.client.post(
+            f"/api/claims/{claim_id}/decision",
+            json={
+                "action": "approve",
+                "note": "Evidence checked against the physical item.",
+                "verification_checks": [
+                    "distinctive_features",
+                    "date_location",
+                    "physical_inspection",
+                    "claimant_identity",
+                ],
+            },
         )
         self.assertEqual(decision.status_code, 200, decision.text)
         self.assertEqual(decision.json()["claim"]["status"], "approved_for_collection")
