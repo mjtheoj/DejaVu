@@ -626,6 +626,8 @@ class LostLinkWorkflowTests(unittest.TestCase):
         found = self.client.post("/api/reports", json=self.report_body("found", "Grey backpack", "Grey backpack with two small front pockets."))
         self.assertEqual(found.status_code, 200, found.text)
         report_id = found.json()["report"]["id"]
+        self.logout()
+        self.login("office@example.test", "office-password")
         intake = self.client.post(f"/api/reports/{report_id}/intake", json={
             "confirmed_physical_receipt": True, "storage_location": "Office shelf B-02",
             "private_detail": "Small fabric loop inside.", "value_band": "medium", "sensitivity_level": 1
