@@ -183,12 +183,12 @@
 
   <dialog id="closeReportDialog" class="dialog-card">
     <form id="closeReportForm" class="form-stack">
-      <div class="dialog-heading"><div><p class="eyebrow">REPORT LIFECYCLE</p><h2>Close lost report</h2></div><button id="closeCloseReport" type="button" class="icon-button" aria-label="Close">×</button></div>
-      <p class="muted small-copy">Close a lost report when you recovered the item elsewhere, no longer need to search, or submitted a duplicate. Closed reports stop generating match suggestions.</p>
+      <div class="dialog-heading"><div><p class="eyebrow">REPORT LIFECYCLE</p><h2 id="closeReportDialogTitle">Close lost report</h2></div><button id="closeCloseReport" type="button" class="icon-button" aria-label="Close">×</button></div>
+      <p id="closeReportDescription" class="muted small-copy">Close a lost report when you recovered the item elsewhere, no longer need to search, or submitted a duplicate. Closed reports stop generating match suggestions.</p>
       <label>Reason <span class="field-required">Required</span><select id="closeReportReason" required><option value="recovered_elsewhere">I recovered the item elsewhere</option><option value="no_longer_searching">I no longer need to search</option><option value="duplicate">This is a duplicate report</option></select></label>
       <label>Additional note <span class="field-optional">Optional</span><textarea id="closeReportNote" rows="3" maxlength="400" placeholder="Optional context for your own record"></textarea></label>
       <p id="closeReportError" class="form-error" role="alert"></p>
-      <div class="form-actions"><button class="button button-danger" type="submit">Close report</button><button id="cancelCloseReport" class="button button-quiet" type="button">Keep it open</button></div>
+      <div class="form-actions"><button id="confirmCloseReportButton" class="button button-danger" type="submit">Close report</button><button id="cancelCloseReport" class="button button-quiet" type="button">Keep it open</button></div>
     </form>
   </dialog>
 
