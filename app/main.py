@@ -722,7 +722,7 @@ class ReportBody(BaseModel):
 
 
 class ReportCloseBody(BaseModel):
-    reason: Literal["recovered_elsewhere", "no_longer_searching", "duplicate"]
+    reason: Literal["recovered_elsewhere", "no_longer_searching", "duplicate", "found_report_withdrawn"]
     note: str | None = Field(default=None, max_length=400)
 
 
@@ -910,33 +910,47 @@ async def create_report(body: ReportBody, user: dict[str, Any] = Depends(authent
 
 
 @app.post("/api/reports/{report_id}/close")
-async def close_lost_report(
+async def close_report(
     report_id: str,
     body: ReportCloseBody,
     user: dict[str, Any] = Depends(authenticated_user),
 ):
     if user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only the report owner can close a lost report.")
+        raise HTTPException(status_code=403, detail="Only the report owner can close their report.")
     with connect_db() as conn:
         report = read_report(conn, report_id)
         if report["created_by"] != user["id"]:
             raise HTTPException(status_code=404, detail="Report not found.")
-        if report["report_type"] != "lost":
-            raise HTTPException(status_code=409, detail="Only lost reports can be closed by their reporter.")
-        if report["status"] != "open":
-            raise HTTPException(status_code=409, detail="Only an open lost report can be closed.")
+        if report["report_type"] == "lost" and report["status"] == "open":
+            if body.reason == "found_report_withdrawn":
+                raise HTTPException(status_code=422, detail="Choose a reason for closing your lost-item search.")
+            final_status = "closed"
+            title = "Lost report closed"
+            message = "Your lost report has been closed. It will no longer generate match suggestions, and its history remains visible in My Reports."
+        elif report["report_type"] == "found" and report["status"] == "awaiting_intake":
+            if body.reason != "found_report_withdrawn":
+                raise HTTPException(status_code=422, detail="A found report can only be withdrawn before office intake.")
+            final_status = "cancelled"
+            title = "Found report withdrawn"
+            message = "Your found report was withdrawn before the campus office accepted physical custody."
+        else:
+            raise HTTPException(status_code=409, detail="Only an open lost report or a found report awaiting office intake can be closed.")
         timestamp = now_iso()
         conn.execute(
-            "UPDATE reports SET status='closed', closure_reason=?, closure_note=?, updated_at=? WHERE id=?",
-            (body.reason, (body.note or "").strip() or None, timestamp, report_id),
+            "UPDATE reports SET status=?, closure_reason=?, closure_note=?, updated_at=? WHERE id=?",
+            (final_status, body.reason, (body.note or "").strip() or None, timestamp, report_id),
         )
-        audit(conn, user["id"], "lost_report_closed", "report", report_id,
-              {"reason": body.reason, "note": (body.note or "").strip() or None})
-        notify_user(conn, user["id"], "report-closed:" + report_id, "Lost report closed",
-                    "Your lost report has been closed. You can still view its record in My Reports.",
-                    "report", report_id)
+        audit(conn, user["id"], "report_closed_or_withdrawn", "report", report_id,
+              {"report_type": report["report_type"], "status": final_status,
+               "reason": body.reason, "note": (body.note or "").strip() or None})
+        notify_user(conn, user["id"], "report-closed:" + report_id, title, message, "report", report_id)
+        if report["report_type"] == "found":
+            notify_role(conn, "office", "found-report-withdrawn:" + report_id,
+                        "Found report withdrawn before intake",
+                        "A student withdrew a found-item report before the physical item was accepted into campus custody.",
+                        "report", report_id)
         updated = read_report(conn, report_id)
-    return {"report": serialise_report(updated), "message": "Lost report closed."}
+    return {"report": serialise_report(updated), "message": title + "."}
 
 
 @app.post("/api/reports/{report_id}/image")
