@@ -473,6 +473,43 @@ def notify_possible_matches(conn: sqlite3.Connection, found_row: sqlite3.Row) ->
     return sent
 
 
+def notify_matches_for_lost_report(conn: sqlite3.Connection, lost_row: sqlite3.Row) -> int:
+    """Notify the reporter when a newly created lost report matches existing office-held items."""
+    from app.matching import matching_engine
+
+    lost = dict(lost_row)
+    if lost.get("image_path"):
+        lost["image_path"] = str(UPLOAD_DIR / lost["image_path"])
+    found_rows = conn.execute(
+        """SELECT * FROM reports WHERE report_type='found' AND status='available'
+           ORDER BY created_at DESC LIMIT 200"""
+    ).fetchall()
+    sent = 0
+    for found_row in found_rows:
+        found = dict(found_row)
+        if found.get("image_path"):
+            found["image_path"] = str(UPLOAD_DIR / found["image_path"])
+        result = matching_engine.compare(lost, found)
+        if result["score"] < 0.58:
+            continue
+        event_key = "match:" + lost_row["id"] + ":" + found_row["id"]
+        prior = conn.execute(
+            "SELECT 1 FROM notifications WHERE user_id=? AND event_key=?",
+            (lost_row["created_by"], event_key),
+        ).fetchone()
+        if prior:
+            continue
+        notify_user(
+            conn, lost_row["created_by"], event_key,
+            "A possible item match was found",
+            "An item already held by the campus office may be relevant to your lost report "
+            + lost_row["public_ref"] + ". Open LostLink to review the suggested match.",
+            "report", lost_row["id"],
+        )
+        sent += 1
+    return sent
+
+
 def certificate_pdf(display_name: str, tier: str, points_at_issue: int, serial: str, issued_at: str) -> bytes:
     from io import BytesIO
     from reportlab.lib import colors
@@ -793,6 +830,7 @@ async def create_report(body: ReportBody, user: dict[str, Any] = Depends(authent
         else:
             notify_user(conn, user["id"], "report-created:" + report_id, "Lost report submitted",
                         "Your lost-item report is saved. LostLink can suggest possible matches as found items are received.", "report", report_id)
+            notify_matches_for_lost_report(conn, read_report(conn, report_id))
         row = read_report(conn, report_id)
     return {"report": serialise_report(row, internal=user["role"] == "office"),
             "message": "Lost report submitted." if body.report_type == "lost" else "Found-item report submitted for office intake. It will become searchable after staff confirm receipt."}
