@@ -11,6 +11,9 @@ let claimSubmitting = false;
 let selectedEvidenceClaimId = null;
 let selectedStorageReportId = null;
 let selectedHandoverClaimId = null;
+let selectedDecisionClaimId = null;
+let selectedDecisionAction = null;
+let claimDecisionSubmitting = false;
 let selectedCloseReportId = null;
 let selectedCloseReportType = null;
 
@@ -905,27 +908,75 @@ async function submitHandover(event) {
 }
 
 
-async function submitDecision(claimId, action) {
+function openDecisionConfirmation(claimId, action) {
+  const actions = {
+    approve: {
+      title: "Verify claim",
+      button: "Verify claim",
+      message: "Approve this claim only after reviewing the private evidence and completing every required verification check. The item will move to the physical handover queue."
+    },
+    reject: {
+      title: "Reject claim",
+      button: "Reject claim",
+      message: "Reject this claim only after reviewing the available evidence. The claimant will be notified and may request one review."
+    },
+    request_more_evidence: {
+      title: "Request more evidence",
+      button: "Request evidence",
+      message: "Ask the claimant to supply additional ownership evidence before the office makes a final decision."
+    },
+    mark_disputed: {
+      title: "Mark claim as disputed",
+      button: "Mark disputed",
+      message: "Place this claim on hold. Competing claims or unresolved evidence must be reviewed before any item can be released."
+    }
+  };
+  const actionInfo = actions[action];
+  if (!actionInfo) {
+    showToast("Unknown claim decision.", true);
+    return;
+  }
+  selectedDecisionClaimId = claimId;
+  selectedDecisionAction = action;
+  $("#decisionConfirmTitle").textContent = actionInfo.title;
+  $("#decisionConfirmMessage").textContent = actionInfo.message;
+  $("#confirmDecisionButton").textContent = actionInfo.button;
+  $("#confirmDecisionButton").className = "button " + (action === "reject" ? "button-danger" : "button-primary");
+  $("#decisionConfirmError").textContent = "";
+  $("#confirmDecisionButton").disabled = false;
+  $("#decisionConfirmDialog").showModal();
+}
+
+async function submitDecision(event) {
+  event.preventDefault();
+  if (!selectedDecisionClaimId || !selectedDecisionAction || claimDecisionSubmitting) return;
+  const claimId = selectedDecisionClaimId;
+  const action = selectedDecisionAction;
   const noteInput = $('[data-note-for="' + CSS.escape(claimId) + '"]');
   const note = noteInput ? noteInput.value.trim() : "";
   const card = $('[data-claim-card="' + CSS.escape(claimId) + '"]');
   const verificationChecks = action === "approve" && card
     ? $('[data-verification-check]:checked', card).map((input) => input.value)
     : [];
-  const prompts = {
-    approve: "Verify this claim only after reviewing the private evidence and checking the required verification items. It will then move to the handover queue.",
-    reject: "Reject this claim after reviewing the evidence?",
-    request_more_evidence: "Ask the claimant for additional evidence?",
-    mark_disputed: "Keep this claim on hold as disputed?"
-  };
-  if (!window.confirm(prompts[action] || "Update claim review?")) return;
+  claimDecisionSubmitting = true;
+  $("#confirmDecisionButton").disabled = true;
+  $("#decisionConfirmError").textContent = "";
   try {
     const result = await api("/api/claims/" + encodeURIComponent(claimId) + "/decision", {
-      method: "POST", body: { action: action, note: note || null, verification_checks: verificationChecks }
+      method: "POST",
+      body: { action, note: note || null, verification_checks: verificationChecks }
     });
+    $("#decisionConfirmDialog").close();
+    selectedDecisionClaimId = null;
+    selectedDecisionAction = null;
     showToast(result.message, false);
-    loadOffice();
-  } catch (error) { showToast(error.message, true); }
+    await loadOffice();
+  } catch (error) {
+    $("#decisionConfirmError").textContent = error.message;
+  } finally {
+    claimDecisionSubmitting = false;
+    $("#confirmDecisionButton").disabled = false;
+  }
 }
 
 async function start() {
@@ -984,7 +1035,7 @@ document.addEventListener("click", (event) => {
   const closeReport = event.target.closest("[data-close-report]");
   if (closeReport) openCloseReport(closeReport.dataset.closeReport, closeReport.dataset.closeType);
   const decision = event.target.closest("[data-decision]");
-  if (decision) submitDecision(decision.dataset.claimId, decision.dataset.decision);
+  if (decision) openDecisionConfirmation(decision.dataset.claimId, decision.dataset.decision);
   const handover = event.target.closest("[data-handover]");
   if (handover) {
     const itemTitle = handover.closest(".list-card")?.querySelector("h3")?.textContent || "this item";
@@ -1010,6 +1061,27 @@ $("#reportImage").addEventListener("change", () => {
 });
 $("#cancelReport").addEventListener("click", () => navigate("browse"));
 $("#claimForm").addEventListener("submit", submitClaim);
+$("#decisionConfirmForm").addEventListener("submit", submitDecision);
+$("#closeDecisionConfirm").addEventListener("click", () => {
+  if (claimDecisionSubmitting) return;
+  $("#decisionConfirmDialog").close();
+  selectedDecisionClaimId = null;
+  selectedDecisionAction = null;
+});
+$("#cancelDecisionConfirm").addEventListener("click", () => {
+  if (claimDecisionSubmitting) return;
+  $("#decisionConfirmDialog").close();
+  selectedDecisionClaimId = null;
+  selectedDecisionAction = null;
+});
+$("#decisionConfirmDialog").addEventListener("cancel", (event) => {
+  if (claimDecisionSubmitting) {
+    event.preventDefault();
+    return;
+  }
+  selectedDecisionClaimId = null;
+  selectedDecisionAction = null;
+});
 $("#handoverForm").addEventListener("submit", submitHandover);
 $("#closeHandover").addEventListener("click", () => { $("#handoverDialog").close(); selectedHandoverClaimId = null; });
 $("#cancelHandover").addEventListener("click", () => { $("#handoverDialog").close(); selectedHandoverClaimId = null; });
