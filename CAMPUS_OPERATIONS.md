@@ -61,7 +61,7 @@ The **Disputed** claim state can mean either competing claims or a claimant-requ
 - The office storage register includes items in custody that are available or approved for collection. Returned items are removed from current inventory and remain represented in the handover record and audit trail.
 - Reward points are only awarded for office-confirmed actions. A student-submitted found item receives +10 on physical intake/tagging and +5 is recorded for a successful verified return. The points are recognition for the finder/contributor, not ownership evidence.
 
-## 4. Campus Sync integration plan
+## 5. Campus Sync integration plan
 
 The GitHub repository currently runs as a standalone web prototype. Campus Sync integration has **not** been implemented because the repository does not contain the college's Campus Sync API/SDK, institutional sign-in contract or deployment credentials.
 
