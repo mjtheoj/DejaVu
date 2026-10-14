@@ -192,7 +192,17 @@
     </form>
   </dialog>
 
-  <dialog id="additionalEvidenceDialog" class="dialog-card">
+  <dialog id="decisionConfirmDialog" class="dialog-card">
+    <form id="decisionConfirmForm" class="form-stack">
+      <div class="dialog-heading"><div><p class="eyebrow">CLAIM REVIEW</p><h2 id="decisionConfirmTitle">Confirm review decision</h2></div><button id="closeDecisionConfirm" type="button" class="icon-button" aria-label="Close">×</button></div>
+      <p id="decisionConfirmMessage" class="muted small-copy"></p>
+      <p class="field-hint">The decision and any internal note will be recorded in the audit trail. Approval does not complete the return; the office must later verify the physical Tag ID and handover.</p>
+      <p id="decisionConfirmError" class="form-error" role="alert"></p>
+      <div class="form-actions"><button id="confirmDecisionButton" class="button button-primary" type="submit">Confirm decision</button><button id="cancelDecisionConfirm" class="button button-quiet" type="button">Cancel</button></div>
+    </form>
+  </dialog>
+
+<dialog id="additionalEvidenceDialog" class="dialog-card">
     <form id="additionalEvidenceForm" class="form-stack">
       <div class="dialog-heading"><div><p class="eyebrow">CLAIM FOLLOW-UP</p><h2>Add ownership evidence</h2></div><button id="closeAdditionalEvidence" type="button" class="icon-button" aria-label="Close">×</button></div>
       <p id="additionalEvidenceSummary" class="muted small-copy">The office requested more evidence for this claim.</p>
