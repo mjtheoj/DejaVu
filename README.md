@@ -55,7 +55,7 @@ The intended integration is to use college-approved institutional authentication
 | Image handling | Pillow validation, orientation correction and re-encoding |
 | Matching | Deterministic text/category/date/location baseline; optional Sentence Transformers semantic text embeddings and CLIP image/text similarity |
 | Recognition | ReportLab-generated milestone PDF certificates |
-| Quality checks | Python unit/workflow tests, JavaScript syntax check and GitHub Actions CI |
+| Quality checks | Python unit/workflow tests, HTML/JavaScript selector-contract tests, JavaScript syntax check and GitHub Actions CI |
 
 The default matcher is a lightweight, reproducible baseline. Pretrained semantic/image models are optional and must be explicitly installed and enabled. Similarity scores are not ownership probabilities, and model-based accuracy should not be claimed without evaluation against labelled campus data.
 

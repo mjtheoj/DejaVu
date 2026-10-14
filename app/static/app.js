@@ -42,6 +42,8 @@ function explainError(data, fallback) {
 let usingMockApi = false;
 let mockNoticeShown = false;
 let inspectedUser = null;
+let notificationPollTimer = null;
+let notificationPollInFlight = false;
 const MOCK_CATEGORIES = [
  {value:"stationery",label:"Stationery & books"},{value:"clothing",label:"Clothing & everyday items"},
  {value:"bags_wallets",label:"Bags & wallets"},{value:"accessories",label:"Personal accessories"},
@@ -325,7 +327,34 @@ async function loadConfig() {
   $("#reportDate").value = localNow.toISOString().slice(0, 16);
 }
 
+function stopNotificationPolling() {
+  if (notificationPollTimer !== null) {
+    window.clearInterval(notificationPollTimer);
+    notificationPollTimer = null;
+  }
+}
+
+function startNotificationPolling() {
+  stopNotificationPolling();
+  notificationPollTimer = window.setInterval(async () => {
+    if (!currentUser || document.hidden || notificationPollInFlight) return;
+    notificationPollInFlight = true;
+    try {
+      if (!$("#notificationsView").classList.contains("hidden")) {
+        await loadNotifications(true);
+      } else {
+        await refreshNotificationBadge();
+      }
+    } catch (_) {
+      // Polling is best-effort; transient network errors should not interrupt the UI.
+    } finally {
+      notificationPollInFlight = false;
+    }
+  }, 10000);
+}
+
 function showLogin() {
+  stopNotificationPolling();
   $("#loginView").classList.remove("hidden");
   $("#appView").classList.add("hidden");
   currentUser = null;
@@ -355,6 +384,7 @@ function enterApp(user) {
     : "Search office-held items, compare possible matches and submit a private claim.";
   $("#studentNav").classList.remove("hidden");
   navigate(user.role === "office" ? "office" : "browse");
+  startNotificationPolling();
 }
 
 function navigate(view) {
@@ -1059,7 +1089,7 @@ async function refreshNotificationBadge() {
   } catch (_) {}
 }
 
-async function loadNotifications() {
+async function loadNotifications(silent = false) {
   if (!currentUser) return;
   try {
     const data = await api("/api/notifications");
@@ -1079,7 +1109,7 @@ async function loadNotifications() {
           : "") + '</div></div></article>';
     }).join("");
     $("#notificationsEmpty").classList.toggle("hidden", data.notifications.length > 0);
-  } catch (error) { showToast(error.message, true); }
+  } catch (error) { if (!silent) showToast(error.message, true); }
 }
 
 async function markNotificationRead(notificationId) {

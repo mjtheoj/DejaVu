@@ -123,6 +123,7 @@ Install the development dependencies:
 pip install -r requirements-dev.txt
 python -m compileall -q app tests
 python -m unittest discover -s tests -v
+# Includes frontend selector/HTML contract checks.
 ```
 
 If Node.js is installed, also check the frontend script:
