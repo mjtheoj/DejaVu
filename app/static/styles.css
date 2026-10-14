@@ -334,3 +334,137 @@ input::placeholder, textarea::placeholder { color: #a4aea7; }
   .login-shell { padding-left: 12px; padding-right: 12px; }
   .login-panel { padding: 22px 17px; }
 }
+
+
+/* LostLink workflow refinements */
+.field-required,
+.field-optional {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 5px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+.field-required { color: #a14640; background: #fff0ee; }
+.field-optional { color: #64776d; background: #eef3ef; }
+
+.characteristic-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 2px;
+}
+.characteristic-chip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #e1e9e1;
+  border-radius: 8px;
+  color: #526860;
+  background: #f7faf6;
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.claim-dispute-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #f0d8d3;
+  border-radius: 12px;
+  background: #fffaf9;
+}
+.claim-dispute-form label { font-size: 11px; }
+.claim-dispute-form textarea { min-height: 78px; }
+.claim-appeal-note {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid #ead9ad;
+  border-radius: 11px;
+  background: #fffaf0;
+}
+.claim-appeal-note strong {
+  display: block;
+  color: #86631f;
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.claim-appeal-note p {
+  margin: 7px 0 0;
+  color: #665941;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.status-closed { color: #53655d; background: #e9eeea; }
+
+.leaderboard-section { margin-top: 26px; }
+.leaderboard-summary { margin: 10px 0 14px; }
+.leaderboard-self {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 14px 16px;
+  border: 1px solid #d9e9dc;
+  border-radius: 14px;
+  background: linear-gradient(110deg, #f2f8f1, #ffffff);
+}
+.leaderboard-self span { color: #63776c; font-size: 11px; font-weight: 700; }
+.leaderboard-self strong { color: var(--primary); font-size: 24px; letter-spacing: -.04em; }
+.leaderboard-self small { margin-left: auto; color: #61786b; font-size: 11px; }
+.leaderboard-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 42px minmax(100px, 1fr) 90px 86px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  border-bottom: 1px solid #edf1ec;
+}
+.leaderboard-row:last-child { border-bottom: 0; }
+.leaderboard-row-self { background: #f1f8f2; }
+.leaderboard-rank {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--primary);
+  background: #e6f3e9;
+  font-size: 11px;
+  font-weight: 850;
+}
+.leaderboard-name { min-width: 0; font-size: 12px; font-weight: 750; overflow-wrap: anywhere; }
+.leaderboard-detail { color: var(--muted); font-size: 10px; text-align: right; }
+.leaderboard-points { font-size: 11px; text-align: right; white-space: nowrap; }
+
+.button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(19, 109, 96, .3);
+  outline-offset: 2px;
+}
+@media (max-width: 560px) {
+  .leaderboard-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 11px;
+  }
+  .leaderboard-detail { display: none; }
+  .leaderboard-points { font-size: 10px; }
+  .leaderboard-self small { width: 100%; margin-left: 0; }
+  .field-required, .field-optional { margin-left: 3px; }
+}
