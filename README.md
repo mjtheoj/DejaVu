@@ -48,5 +48,6 @@ SQLite and local file storage are suitable for prototype evaluation, not a claim
 
 ## Project documentation
 
+- [Round 1 jury overview](ROUND_1_JURY.md) — detailed solution narrative, architecture, Mermaid flowcharts, demo plan and jury Q&A.
 - [Local development and run commands](LOCAL_DEVELOPMENT.md) — installation, environment, demo access, optional models and tests.
 - [Campus operations and integration](CAMPUS_OPERATIONS.md) — item custody, Tag ID returns, staff procedure and Campus Sync integration prerequisites.
