@@ -62,7 +62,11 @@ def _parse_date(value: Any) -> datetime | None:
 
 
 def _text_value(report: dict[str, Any]) -> str:
-    return " ".join(str(report.get(k) or "") for k in ("title", "description", "category"))
+    # Explicit public characteristics contribute to matching without reusing private claim evidence.
+    return " ".join(
+        str(report.get(k) or "")
+        for k in ("title", "description", "brand", "primary_color", "visible_features", "category")
+    )
 
 
 def _location_score(lost: dict[str, Any], found: dict[str, Any]) -> float | None:
