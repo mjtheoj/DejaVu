@@ -468,11 +468,19 @@ async function loadMyClaims() {
           '</span><span class="' + statusClass(claim.linked_lost_report.status) + '">' +
           escapeHTML(statusLabel(claim.linked_lost_report.status)) + '</span></div>'
         : "";
+      const evidenceTypes = Array.isArray(claim.evidence_types) ? claim.evidence_types : [];
+      const evidenceChips = evidenceTypes.length
+        ? '<div class="evidence-type-list"><strong>Proof types</strong>' +
+          evidenceTypes.map((type) => '<span class="characteristic-chip">' + escapeHTML(evidenceTypeLabel(type)) + '</span>').join("") + '</div>'
+        : "";
+      const evidencePhoto = claim.evidence_image_available
+        ? '<figure class="evidence-image-preview"><img src="/api/claims/' + escapeHTML(claim.id) + '/evidence-image" alt="Your private evidence preview" draggable="false"><figcaption>Private, watermarked preview</figcaption></figure>'
+        : "";
       return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '"><div class="list-card-head"><div><h3>' + escapeHTML(claim.report.title) + '</h3><p>' +
         escapeHTML(claim.report.public_ref + " · Submitted " + humanDate(claim.created_at)) + "</p></div><span class=\"" + statusClass(claim.status) + "\">" +
         escapeHTML(statusLabel(claim.status)) + "</span></div><p>" + escapeHTML(guidance) + '</p>' + appealNote + linkedLost + '<div class="list-card-meta"><span>⌖ ' +
-        escapeHTML(claim.report.location) + "</span><span>Reference " + escapeHTML(claim.report.public_ref) + "</span></div><div class=\"card-actions\">" +
-        addEvidence + "</div>" + disputeForm + "</article>";
+        escapeHTML(claim.report.location) + "</span><span>Reference " + escapeHTML(claim.report.public_ref) + "</span></div>" +
+        evidenceChips + evidencePhoto + '<div class="card-actions">' + addEvidence + "</div>" + disputeForm + "</article>";
     }).join("");
     $("#myClaimsEmpty").classList.toggle("hidden", data.claims.length > 0);
   } catch (error) { showToast(error.message, true); }
@@ -490,6 +498,7 @@ function openClaim(reportId) {
 }
 
 let lastKnownReports = [];
+let selectedDetailsReportId = null;
 function findReportById(id) {
   return lastKnownReports.find((report) => report.id === id) || null;
 }
@@ -719,6 +728,14 @@ function officeClaimCard(claim) {
       '</span><span class="' + statusClass(claim.linked_lost_report.status) + '">' +
       escapeHTML(statusLabel(claim.linked_lost_report.status)) + '</span></div>'
     : "";
+  const evidenceTypes = Array.isArray(claim.evidence_types) ? claim.evidence_types : [];
+  const evidenceChips = evidenceTypes.length
+    ? '<div class="evidence-type-list"><strong>CLAIMANT-PROVIDED PROOF TYPES</strong>' +
+      evidenceTypes.map((type) => '<span class="characteristic-chip">' + escapeHTML(evidenceTypeLabel(type)) + '</span>').join("") + '</div>'
+    : "";
+  const evidencePhoto = claim.evidence_image_available
+    ? '<figure class="evidence-image-preview"><img src="/api/claims/' + escapeHTML(claim.id) + '/evidence-image" alt="Private claim evidence preview" draggable="false"><figcaption>Private, watermarked preview · claimant and office only</figcaption></figure>'
+    : "";
   return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '"><div class="list-card-head"><div><h3>' +
     escapeHTML(report.title) + " · " + escapeHTML(report.public_ref) +
     '</h3><p>Claimant: ' + escapeHTML(claim.claimant_name) + " · " + escapeHTML(claim.claimant_email) + "</p></div><span class=\"" + statusClass(claim.status) +
@@ -727,6 +744,7 @@ function officeClaimCard(claim) {
     "</span><span>Value band: " + escapeHTML(report.value_band || "unknown") + "</span><span>Sensitivity: " + escapeHTML(report.sensitivity_level) + "</span></div>" +
     linkedLost +
     '<div class="claim-evidence"><strong>CLAIMANT EVIDENCE · PRIVATE</strong><p>' + escapeHTML(claim.evidence) + "</p></div>" +
+    evidenceChips + evidencePhoto +
     (claim.appeal_note ? '<div class="claim-appeal-note"><strong>CLAIMANT REVIEW REQUEST</strong><p>' + escapeHTML(claim.appeal_note) + '</p></div>' : "") +
     '<div class="internal-detail"><strong>INTERNAL VERIFICATION DETAIL</strong><small>' + escapeHTML(privateDetail) + "</small></div>" +
     '<div class="list-card-meta"><span>⌖ ' + escapeHTML(report.location) + "</span><span>Submitted " + escapeHTML(humanDateTime(claim.created_at)) + "</span></div>" +
@@ -773,14 +791,19 @@ async function loadNotifications() {
     const data = await api("/api/notifications");
     $("#notificationNavCount").textContent = String(data.unread_count || 0);
     $("#notificationNavCount").classList.toggle("hidden", !data.unread_count);
-    $("#notificationsList").innerHTML = data.notifications.map((item) =>
-      '<article class="notification-card ' + (item.read_at ? "is-read" : "is-unread") + '">' +
-      '<div class="notification-mark">' + (item.read_at ? "✓" : "•") + "</div><div class=\"notification-content\"><div class=\"notification-heading\"><strong>" +
-      escapeHTML(item.title) + '</strong><span>' + escapeHTML(humanDateTime(item.created_at)) + "</span></div><p>" +
-      escapeHTML(item.message) + "</p>" + (!item.read_at
-        ? '<button class="button button-quiet button-small" type="button" data-notification-read="' + escapeHTML(item.id) + '">Mark read</button>'
-        : "") + "</div></article>"
-    ).join("");
+    $("#notificationsList").innerHTML = data.notifications.map((item) => {
+      const canViewMatches = item.entity_type === "report" && item.entity_id &&
+        String(item.title || "").toLowerCase().includes("possible item match");
+      const matchButton = canViewMatches
+        ? '<button class="button button-primary button-small" type="button" data-notification-matches="' + escapeHTML(item.entity_id) + '">View match details</button>'
+        : "";
+      return '<article class="notification-card ' + (item.read_at ? "is-read" : "is-unread") + '">' +
+        '<div class="notification-mark">' + (item.read_at ? "✓" : "•") + '</div><div class="notification-content"><div class="notification-heading"><strong>' +
+        escapeHTML(item.title) + '</strong><span>' + escapeHTML(humanDateTime(item.created_at)) + '</span></div><p>' +
+        escapeHTML(item.message) + '</p><div class="notification-actions">' + matchButton + (!item.read_at
+          ? '<button class="button button-quiet button-small" type="button" data-notification-read="' + escapeHTML(item.id) + '">Mark read</button>'
+          : "") + '</div></div></article>';
+    }).join("");
     $("#notificationsEmpty").classList.toggle("hidden", data.notifications.length > 0);
   } catch (error) { showToast(error.message, true); }
 }
@@ -1095,6 +1118,10 @@ $("#fillOffice").addEventListener("click", () => {
   $("#loginEmail").value = "office@lostlink.local";
   $("#loginPassword").value = "office123";
 });
+$$("[data-demo-email]").forEach((button) => button.addEventListener("click", () => {
+  $("#loginEmail").value = button.dataset.demoEmail;
+  $("#loginPassword").value = button.dataset.demoPassword;
+}));
 $("#logoutButton").addEventListener("click", async () => {
   try { await api("/api/logout", { method: "POST" }); } catch (_) {}
   showLogin();
@@ -1106,6 +1133,15 @@ $("#studentNav").addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   const go = event.target.closest("[data-go]");
   if (go) navigate(go.dataset.go);
+  const reportKind = event.target.closest("[data-report-kind]");
+  if (reportKind) setReportMode(reportKind.dataset.reportKind);
+  const detailButton = event.target.closest("[data-view-details]");
+  if (detailButton) openItemDetails(detailButton.dataset.viewDetails);
+  const notificationMatches = event.target.closest("[data-notification-matches]");
+  if (notificationMatches) {
+    navigate("my-reports");
+    loadMatches(notificationMatches.dataset.notificationMatches);
+  }
   const matches = event.target.closest("[data-matches]");
   if (matches) loadMatches(matches.dataset.matches);
   const evidence = event.target.closest("[data-add-evidence]");
@@ -1135,12 +1171,31 @@ $("#searchForm").addEventListener("submit", (event) => { event.preventDefault();
 $("#readAllNotifications").addEventListener("click", markAllNotificationsRead);
 $("#clearFilters").addEventListener("click", resetSearch);
 $("#reportForm").addEventListener("submit", submitReport);
+$("#backToReportTypes").addEventListener("click", resetReportMode);
 $("#reportImage").addEventListener("change", () => {
   const file = $("#reportImage").files[0];
   $("#imageLabel").textContent = file ? file.name : "Choose a photo";
 });
-$("#cancelReport").addEventListener("click", () => navigate("browse"));
+$("#cancelReport").addEventListener("click", () => { resetReportMode(); navigate("browse"); });
+$("#claimEvidenceImage").addEventListener("change", () => {
+  const file = $("#claimEvidenceImage").files[0];
+  $("#claimEvidenceImageLabel").textContent = file ? file.name : "Attach one supporting photo (optional)";
+});
 $("#claimForm").addEventListener("submit", submitClaim);
+$("#closeItemDetails").addEventListener("click", () => { $("#itemDetailsDialog").close(); selectedDetailsReportId = null; });
+$("#cancelItemDetails").addEventListener("click", () => { $("#itemDetailsDialog").close(); selectedDetailsReportId = null; });
+$("#itemDetailsClaimButton").addEventListener("click", () => {
+  const reportId = selectedDetailsReportId;
+  $("#itemDetailsDialog").close();
+  selectedDetailsReportId = null;
+  if (reportId) openClaim(reportId);
+});
+document.addEventListener("contextmenu", (event) => {
+  if (event.target.closest(".item-visual img, .item-detail-photo, .evidence-image-preview img")) event.preventDefault();
+});
+document.addEventListener("dragstart", (event) => {
+  if (event.target.matches(".item-visual img, .item-detail-photo, .evidence-image-preview img")) event.preventDefault();
+});
 $("#decisionConfirmForm").addEventListener("submit", submitDecision);
 $("#closeDecisionConfirm").addEventListener("click", () => {
   if (claimDecisionSubmitting) return;
