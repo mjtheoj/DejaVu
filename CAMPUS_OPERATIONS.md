@@ -18,11 +18,11 @@ Older local database records whose storage location was never recorded are marke
 
 ## 2. Claim review and Tag ID handover
 
-1. The claimant selects an available item and submits private ownership evidence. The evidence is shown to the office reviewer, not public search.
+1. The claimant selects an available item and submits private ownership evidence. They can optionally link one of their own open lost reports. The evidence is shown to the office reviewer, not public search.
 2. Authorised office staff review distinctive features/owner-only details, time and location consistency, physical inspection and independent evidence as relevant. The app requires identity confirmation and a minimum number of checks based on item risk. Restricted/high-sensitivity items also require an authorised-record/custodian check.
 3. Competing claims must be resolved before any claim is approved. Approval changes the claim to **Ready for physical handover**; the physical item remains in campus custody.
 4. Staff use the inventory's private storage location to retrieve the item. At collection, staff compare the physical label with the Tag ID on the approved claim, check the claimant's identity under campus policy and hand the physical item to that claimant.
-5. Staff confirm physical handover in LostLink and enter the exact Tag ID. A mismatched tag, a claim that is not approved, or a duplicate handover is rejected. A successful handover records the claimant, office staff, item/tag and timestamp; marks the claim and item **Returned**; and triggers an in-app notification.
+5. Staff confirm physical handover in LostLink and enter the exact Tag ID. A mismatched tag, a claim that is not approved, or a duplicate handover is rejected. A successful handover records the claimant, office staff, item/tag and timestamp; marks the claim and item **Returned**; and triggers an in-app notification. If the claimant linked an open lost report, LostLink closes that report in the same database transaction and notifies the claimant. A linked lost report cannot be closed manually while its claim is active.
 
 The Tag ID establishes which inventory record is being released; it does not, by itself, prove who owns the item. Identity and claim verification remain mandatory.
 
@@ -50,6 +50,7 @@ Student-owned reports have controlled exit paths so stale reports do not stay ac
 | Claim | Active review state | **Not approved** | Office rejects the claim |
 | Rejected claim | **Not approved** | **Disputed / review requested** | Claimant requests one review with a reason |
 | Claim | **Ready for handover** | **Returned** | Office records actual physical handover |
+| Linked lost report | **Open** | **Closed** | The linked claim’s verified physical handover is recorded |
 
 The **Disputed** claim state can mean either competing claims or a claimant-requested review. The prototype stores the review request separately in the appeal note, so office staff can distinguish the reason. A rejected claim can be reviewed once; a completed handover and a closed report are final states in the current prototype.
 
