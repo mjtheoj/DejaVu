@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import secrets
 import sqlite3
@@ -17,7 +18,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 from starlette.middleware.sessions import SessionMiddleware
 
 load_dotenv()
@@ -30,6 +31,98 @@ DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 SESSION_SECRET = os.getenv("SESSION_SECRET", "local-development-only-change-this")
 HTTPS_ONLY = os.getenv("SESSION_HTTPS_ONLY", "false").lower() == "true"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+ALLOWED_EVIDENCE_TYPES = {
+    "distinctive_features", "purchase_or_receipt", "packaging_or_accessory",
+    "timeline_and_location", "device_or_account_context", "other"
+}
+
+
+def perceptual_image_hash(image: Image.Image) -> str:
+    """Low-frequency image fingerprint: tolerant of re-encoding and light watermarks."""
+    gray = image.convert("L").resize((32, 32))
+    pixels = list(gray.getdata())
+    cosines = [[math.cos((2 * x + 1) * u * math.pi / 64) for x in range(32)] for u in range(8)]
+    coefficients = []
+    for v in range(8):
+        for u in range(8):
+            total = 0.0
+            for y in range(32):
+                row_offset = y * 32
+                cy = cosines[v][y]
+                for x in range(32):
+                    total += pixels[row_offset + x] * cosines[u][x] * cy
+            coefficients.append(total)
+    values = coefficients[1:]
+    median = sorted(values)[len(values) // 2]
+    bits = "".join("1" if value > median else "0" for value in coefficients)
+    return f"{int(bits, 2):016x}"
+
+
+def perceptual_hash_from_bytes(raw: bytes) -> str:
+    with Image.open(BytesIO(raw)) as source:
+        safe = ImageOps.exif_transpose(source).convert("RGB")
+        safe.thumbnail((1800, 1800))
+        return perceptual_image_hash(safe)
+
+
+def canonicalise_image(raw: bytes) -> tuple[bytes, str, str]:
+    """Validate, normalize orientation/size, strip metadata, and fingerprint an image."""
+    Image.MAX_IMAGE_PIXELS = 24_000_000
+    try:
+        with Image.open(BytesIO(raw)) as check:
+            if check.format not in {"JPEG", "PNG", "WEBP"}:
+                raise HTTPException(status_code=415, detail="Use a JPG, PNG or WebP image.")
+            check.verify()
+        with Image.open(BytesIO(raw)) as source:
+            safe = ImageOps.exif_transpose(source).convert("RGB")
+            safe.thumbnail((1800, 1800))
+            phash = perceptual_image_hash(safe)
+            output = BytesIO()
+            safe.save(output, format="JPEG", quality=88, optimize=True)
+            normalized = output.getvalue()
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+        raise HTTPException(status_code=415, detail="The file is not a valid supported image.")
+    return normalized, hashlib.sha256(normalized).hexdigest(), phash
+
+
+def image_fingerprint_matches(conn: sqlite3.Connection, image_sha256: str, image_phash: str) -> bool:
+    """Check exact hashes and visually near-identical photos across reports and claim evidence."""
+    existing = conn.execute(
+        """SELECT image_sha256, image_phash FROM reports WHERE image_path IS NOT NULL
+           UNION ALL
+           SELECT image_sha256, image_phash FROM claim_evidence_images"""
+    ).fetchall()
+    candidate = int(image_phash, 16)
+    for row in existing:
+        if row["image_sha256"] and secrets.compare_digest(str(row["image_sha256"]), image_sha256):
+            return True
+        if row["image_phash"]:
+            try:
+                if (candidate ^ int(row["image_phash"], 16)).bit_count() <= 4:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
+
+
+def watermark_image(path: Path, label: str) -> bytes:
+    """Serve labelled previews to discourage saving/reusing photos as claim evidence."""
+    with Image.open(path) as source:
+        image = source.convert("RGB")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    text = "LostLink - " + label
+    bounds = draw.textbbox((0, 0), text, font=font)
+    bar_height = max(30, bounds[3] - bounds[1] + 14)
+    top = max(0, image.height - bar_height)
+    draw.rectangle((0, top, image.width, image.height), fill=(18, 44, 42))
+    draw.text((12, top + 6), text, font=font, fill=(255, 255, 255))
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=88, optimize=True)
+    return output.getvalue()
+
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -143,6 +236,8 @@ def initialise_db() -> None:
                 location_room TEXT,
                 location_area TEXT,
                 image_path TEXT,
+                image_sha256 TEXT,
+                image_phash TEXT,
                 status TEXT NOT NULL,
                 closure_reason TEXT,
                 closure_note TEXT,
@@ -162,6 +257,7 @@ def initialise_db() -> None:
                 lost_report_id TEXT REFERENCES reports(id),
                 claimant_id INTEGER NOT NULL REFERENCES users(id),
                 evidence TEXT NOT NULL,
+                evidence_types TEXT NOT NULL DEFAULT '[]',
                 status TEXT NOT NULL,
                 appeal_note TEXT,
                 appeal_count INTEGER NOT NULL DEFAULT 0,
@@ -227,6 +323,15 @@ def initialise_db() -> None:
                 checks_json TEXT NOT NULL,
                 verified_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS claim_evidence_images (
+                id TEXT PRIMARY KEY,
+                claim_id TEXT NOT NULL UNIQUE REFERENCES claims(id) ON DELETE CASCADE,
+                uploader_id INTEGER NOT NULL REFERENCES users(id),
+                image_path TEXT NOT NULL,
+                image_sha256 TEXT NOT NULL,
+                image_phash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_reward_ledger_user_created ON reward_ledger(user_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_reports_status_type ON reports(status, report_type);
@@ -251,14 +356,35 @@ def initialise_db() -> None:
             ("visible_features", "TEXT"),
             ("closure_reason", "TEXT"),
             ("closure_note", "TEXT"),
+            ("image_sha256", "TEXT"),
+            ("image_phash", "TEXT"),
         ):
             if column not in report_columns:
                 conn.execute(f"ALTER TABLE reports ADD COLUMN {column} {declaration}")
+        for image_row in conn.execute(
+            "SELECT id, image_path, image_sha256, image_phash FROM reports WHERE image_path IS NOT NULL"
+        ).fetchall():
+            image_path = (UPLOAD_DIR / image_row["image_path"]).resolve()
+            if image_path.parent != UPLOAD_DIR.resolve() or not image_path.is_file():
+                continue
+            if image_row["image_sha256"] and image_row["image_phash"]:
+                continue
+            try:
+                image_bytes = image_path.read_bytes()
+                image_digest = image_row["image_sha256"] or hashlib.sha256(image_bytes).hexdigest()
+                image_phash = image_row["image_phash"] or perceptual_hash_from_bytes(image_bytes)
+                conn.execute(
+                    "UPDATE reports SET image_sha256=?, image_phash=? WHERE id=?",
+                    (image_digest, image_phash, image_row["id"]),
+                )
+            except (OSError, UnidentifiedImageError, ValueError):
+                continue
         claim_columns = {row["name"] for row in conn.execute("PRAGMA table_info(claims)").fetchall()}
         for column, declaration in (
             ("appeal_note", "TEXT"),
             ("appeal_count", "INTEGER NOT NULL DEFAULT 0"),
             ("lost_report_id", "TEXT REFERENCES reports(id)"),
+            ("evidence_types", "TEXT NOT NULL DEFAULT '[]'"),
         ):
             if column not in claim_columns:
                 conn.execute(f"ALTER TABLE claims ADD COLUMN {column} {declaration}")
@@ -275,6 +401,16 @@ def initialise_db() -> None:
                VALUES (?, ?, 'office', ?, ?)""",
             ("office@lostlink.local", "Campus Office", hash_password("office123"), now_iso()),
         )
+        for email, display_name, password in (
+            ("student2@lostlink.local", "Aarav Mehta", "student2123"),
+            ("student3@lostlink.local", "Riya Sharma", "student3123"),
+            ("student4@lostlink.local", "Kabir Rao", "student4123"),
+        ):
+            conn.execute(
+                """INSERT OR IGNORE INTO users(email, display_name, role, password_hash, created_at)
+                   VALUES (?, ?, 'student', ?, ?)""",
+                (email, display_name, hash_password(password), now_iso()),
+            )
         student_id = conn.execute("SELECT id FROM users WHERE email=?", ("student@lostlink.local",)).fetchone()["id"]
         office_id = conn.execute("SELECT id FROM users WHERE email=?", ("office@lostlink.local",)).fetchone()["id"]
         if conn.execute("SELECT COUNT(*) AS n FROM reports").fetchone()["n"] > 0:
@@ -749,6 +885,7 @@ class ClaimBody(BaseModel):
     report_id: str
     evidence: str = Field(min_length=20, max_length=1800)
     lost_report_id: str | None = None
+    evidence_types: list[str] = Field(default_factory=list)
 
 
 class ClaimEvidenceBody(BaseModel):
@@ -850,8 +987,14 @@ async def list_reports(
         params.append("%" + room.lower() + "%")
     if q:
         term = "%" + q.strip().lower() + "%"
-        conditions.append("(LOWER(r.title) LIKE ? OR LOWER(r.description) LIKE ? OR LOWER(r.public_ref) LIKE ? OR LOWER(COALESCE(r.location_area,'')) LIKE ?)")
-        params.extend([term, term, term, term])
+        conditions.append("""(
+            LOWER(r.title) LIKE ? OR LOWER(r.description) LIKE ? OR LOWER(r.public_ref) LIKE ?
+            OR LOWER(COALESCE(r.location_area,'')) LIKE ? OR LOWER(COALESCE(r.brand,'')) LIKE ?
+            OR LOWER(COALESCE(r.primary_color,'')) LIKE ? OR LOWER(COALESCE(r.visible_features,'')) LIKE ?
+            OR LOWER(COALESCE(r.location_block,'')) LIKE ? OR LOWER(COALESCE(r.location_floor,'')) LIKE ?
+            OR LOWER(COALESCE(r.location_room,'')) LIKE ?
+        )""")
+        params.extend([term] * 10)
     if date_from:
         conditions.append("COALESCE(r.occurred_at,'') >= ?")
         params.append(date_from)
@@ -998,25 +1141,16 @@ async def upload_report_image(
     raw = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Images must be 5 MB or smaller.")
-    Image.MAX_IMAGE_PIXELS = 24_000_000
-    try:
-        with Image.open(BytesIO(raw)) as check:
-            if check.format not in {"JPEG", "PNG", "WEBP"}:
-                raise HTTPException(status_code=415, detail="Use a JPG, PNG or WebP image.")
-            check.verify()
-        with Image.open(BytesIO(raw)) as source:
-            safe = ImageOps.exif_transpose(source).convert("RGB")
-            safe.thumbnail((1800, 1800))
-            filename = uuid.uuid4().hex + ".jpg"
-            safe.save(UPLOAD_DIR / filename, format="JPEG", quality=88, optimize=True)
-    except HTTPException:
-        raise
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
-        raise HTTPException(status_code=415, detail="The file is not a valid supported image.")
+    normalized, image_sha256, image_phash = canonicalise_image(raw)
+    filename = uuid.uuid4().hex + ".jpg"
+    (UPLOAD_DIR / filename).write_bytes(normalized)
     with connect_db() as conn:
         row = read_report(conn, report_id)
         old = row["image_path"]
-        conn.execute("UPDATE reports SET image_path=?, updated_at=? WHERE id=?", (filename, now_iso(), report_id))
+        conn.execute(
+            "UPDATE reports SET image_path=?, image_sha256=?, image_phash=?, updated_at=? WHERE id=?",
+            (filename, image_sha256, image_phash, now_iso(), report_id),
+        )
         audit(conn, user["id"], "report_image_added", "report", report_id)
         if old:
             try:
@@ -1041,7 +1175,15 @@ async def get_report_image(report_id: str, user: dict[str, Any] = Depends(authen
     path = (UPLOAD_DIR / row["image_path"]).resolve()
     if path.parent != UPLOAD_DIR.resolve() or not path.is_file():
         raise HTTPException(status_code=404, detail="Image not found.")
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, no-store"})
+    headers = {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if user["role"] != "office":
+        return StreamingResponse(BytesIO(watermark_image(path, row["public_ref"])),
+                                 media_type="image/jpeg", headers=headers)
+    return FileResponse(path, media_type="image/jpeg", headers=headers)
 
 
 @app.get("/api/reports/{report_id}/matches")
@@ -1165,6 +1307,11 @@ async def update_storage_location(
 async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authenticated_user)):
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Claims must be submitted from a student account.")
+    if any(item not in ALLOWED_EVIDENCE_TYPES for item in body.evidence_types):
+        raise HTTPException(status_code=422, detail="Choose valid ownership evidence types.")
+    if len(set(body.evidence_types)) != len(body.evidence_types):
+        raise HTTPException(status_code=422, detail="Do not select the same evidence type twice.")
+    evidence_types = list(body.evidence_types)
     with connect_db() as conn:
         report = read_report(conn, body.report_id)
         if report["report_type"] != "found" or report["status"] != "available":
@@ -1210,9 +1357,10 @@ async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authentic
         claim_id = uuid.uuid4().hex
         timestamp = now_iso()
         conn.execute(
-            """INSERT INTO claims(id, report_id, lost_report_id, claimant_id, evidence, status, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (claim_id, body.report_id, body.lost_report_id, user["id"], body.evidence.strip(), status, timestamp, timestamp),
+            """INSERT INTO claims(id, report_id, lost_report_id, claimant_id, evidence, evidence_types, status, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (claim_id, body.report_id, body.lost_report_id, user["id"], body.evidence.strip(),
+             json.dumps(evidence_types), status, timestamp, timestamp),
         )
         if active:
             conn.execute(
@@ -1241,6 +1389,77 @@ async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authentic
                       "report": serialise_report(report), "message": "Claim submitted for review."}}
 
 
+
+@app.post("/api/claims/{claim_id}/evidence-image")
+async def upload_claim_evidence_image(
+    claim_id: str,
+    file: UploadFile = File(...),
+    user: dict[str, Any] = Depends(authenticated_user),
+):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only the claimant can add an ownership-evidence image.")
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Evidence images must be 5 MB or smaller.")
+    normalized, image_sha256, image_phash = canonicalise_image(raw)
+    with connect_db() as conn:
+        claim = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
+        if not claim or claim["claimant_id"] != user["id"]:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+        if claim["status"] not in {"pending", "disputed", "needs_more_evidence"}:
+            raise HTTPException(status_code=409, detail="Evidence images can only be added while a claim is under review.")
+        if conn.execute("SELECT 1 FROM claim_evidence_images WHERE claim_id=?", (claim_id,)).fetchone():
+            raise HTTPException(status_code=409, detail="This claim already has an evidence image attached.")
+        if image_fingerprint_matches(conn, image_sha256, image_phash):
+            raise HTTPException(
+                status_code=409,
+                detail="This image duplicates or closely matches an image already in LostLink. Use a different, genuine proof image or explain another owner-only detail in text.",
+            )
+        filename = "claim-" + uuid.uuid4().hex + ".jpg"
+        (UPLOAD_DIR / filename).write_bytes(normalized)
+        conn.execute(
+            """INSERT INTO claim_evidence_images
+               (id, claim_id, uploader_id, image_path, image_sha256, image_phash, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (uuid.uuid4().hex, claim_id, user["id"], filename, image_sha256, image_phash, now_iso()),
+        )
+        audit(conn, user["id"], "claim_evidence_image_added", "claim", claim_id,
+              {"sha256_prefix": image_sha256[:12]})
+        notify_role(conn, "office", "claim-evidence-image:" + claim_id,
+                    "Claim evidence image submitted", "A claimant attached private image evidence for review.",
+                    "claim", claim_id)
+    return {"ok": True, "message": "Private evidence image attached."}
+
+
+@app.get("/api/claims/{claim_id}/evidence-image")
+async def get_claim_evidence_image(
+    claim_id: str,
+    user: dict[str, Any] = Depends(authenticated_user),
+):
+    with connect_db() as conn:
+        claim = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
+        if not claim:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+        if user["role"] != "office" and claim["claimant_id"] != user["id"]:
+            raise HTTPException(status_code=404, detail="Evidence image not available.")
+        image_row = conn.execute(
+            "SELECT image_path FROM claim_evidence_images WHERE claim_id=?", (claim_id,)
+        ).fetchone()
+    if not image_row:
+        raise HTTPException(status_code=404, detail="No evidence image is attached.")
+    path = (UPLOAD_DIR / image_row["image_path"]).resolve()
+    if path.parent != UPLOAD_DIR.resolve() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Evidence image not found.")
+    headers = {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+    }
+    label = "PRIVATE CLAIM " + claim_id[:8].upper()
+    return StreamingResponse(BytesIO(watermark_image(path, label)),
+                             media_type="image/jpeg", headers=headers)
+
+
 @app.get("/api/claims")
 async def list_claims(user: dict[str, Any] = Depends(authenticated_user)):
     internal = user["role"] == "office"
@@ -1267,9 +1486,18 @@ async def list_claims(user: dict[str, Any] = Depends(authenticated_user)):
                     "title": linked_row["title"],
                     "status": linked_row["status"],
                 }
+            try:
+                evidence_types = json.loads(claim["evidence_types"] or "[]")
+            except (TypeError, ValueError):
+                evidence_types = []
+            evidence_image = conn.execute(
+                "SELECT 1 FROM claim_evidence_images WHERE claim_id=?", (claim["id"],)
+            ).fetchone()
             entry = {
                 "id": claim["id"],
                 "status": claim["status"],
+                "evidence_types": evidence_types,
+                "evidence_image_available": evidence_image is not None,
                 "created_at": claim["created_at"],
                 "updated_at": claim["updated_at"],
                 "appeal_note": claim["appeal_note"],
