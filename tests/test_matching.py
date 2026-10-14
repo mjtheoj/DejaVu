@@ -30,6 +30,25 @@ class MatchingTests(unittest.TestCase):
         self.assertGreaterEqual(result["score"], 0.9)
         self.assertIn("category", result["signals"])
 
+    def test_optional_brand_colour_and_visible_features_improve_matching(self):
+        lost = {
+            "title": "Small accessory", "description": "A small item lost in a classroom",
+            "category": "accessories", "brand": "Northline", "primary_color": "teal",
+            "visible_features": "two silver clips and a woven loop",
+        }
+        found_with_details = {
+            "title": "Small accessory", "description": "A small item found in a hallway",
+            "category": "accessories", "brand": "Northline", "primary_color": "teal",
+            "visible_features": "two silver clips and a woven loop",
+        }
+        found_without_details = {
+            "title": "Small accessory", "description": "A small item found in a hallway",
+            "category": "accessories",
+        }
+        detailed_score = self.engine.compare(lost, found_with_details)["score"]
+        generic_score = self.engine.compare(lost, found_without_details)["score"]
+        self.assertGreater(detailed_score, generic_score)
+
     def test_missing_location_and_date_are_supported(self):
         lost = {"title": "Black headphones", "description": "black headphones", "category": "accessories"}
         found = {"title": "Black headphones", "description": "black headphones", "category": "accessories"}
