@@ -61,6 +61,9 @@ class LostLinkWorkflowTests(unittest.TestCase):
             "description": description,
             "category": "bags_wallets",
             "occurred_at": "2026-10-13T12:00:00",
+            "brand": "Trailwise",
+            "primary_color": "navy blue",
+            "visible_features": "two front pockets",
             "location_block": "Block A",
             "location_floor": "1",
             "location_room": "A-101",
@@ -75,6 +78,9 @@ class LostLinkWorkflowTests(unittest.TestCase):
             json=self.report_body("lost", "Dark blue backpack", "Dark blue backpack with two front pockets and a small stitched mark."),
         )
         self.assertEqual(lost_response.status_code, 200, lost_response.text)
+        self.assertEqual(lost_response.json()["report"]["brand"], "Trailwise")
+        self.assertEqual(lost_response.json()["report"]["primary_color"], "navy blue")
+        self.assertEqual(lost_response.json()["report"]["visible_features"], "two front pockets")
         lost_report_id = lost_response.json()["report"]["id"]
         self.logout()
 
@@ -217,6 +223,17 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.assertEqual(activity.json()["total_points"], 15)
         self.assertEqual(len(activity.json()["ledger"]), 2)
         self.assertEqual(activity.json()["certificates"], [])
+        leaderboard = self.client.get("/api/leaderboard")
+        self.assertEqual(leaderboard.status_code, 200, leaderboard.text)
+        self.assertEqual(leaderboard.json()["my_rank"], 1)
+        self.assertEqual(leaderboard.json()["my_total_points"], 15)
+        self.assertEqual(leaderboard.json()["leaders"][0]["display_name"], "Finder Student")
+        self.assertNotIn("email", leaderboard.json()["leaders"][0])
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        self.assertEqual(self.client.get("/api/leaderboard").status_code, 403)
+        self.logout()
 
         # Claimant gets their own state update, not the reviewer's private note.
         self.logout()
@@ -233,6 +250,103 @@ class LostLinkWorkflowTests(unittest.TestCase):
         intake_notice = next(item for item in finder_notifications if item["title"] == "Found item received and stored")
         self.assertNotIn(tag_id, intake_notice["message"])
         self.assertNotIn("Student Affairs Office - Cabinet B2", intake_notice["message"])
+
+    def test_lost_report_can_be_closed_and_no_longer_matched(self):
+        self.login("claimant@example.test", "claimant-password")
+        created = self.client.post(
+            "/api/reports",
+            json=self.report_body("lost", "Black headphones", "Black over-ear headphones with a fabric case."),
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        report_id = created.json()["report"]["id"]
+        closed = self.client.post(
+            f"/api/reports/{report_id}/close",
+            json={"reason": "recovered_elsewhere", "note": "Found them in my room."},
+        )
+        self.assertEqual(closed.status_code, 200, closed.text)
+        self.assertEqual(closed.json()["report"]["status"], "closed")
+        self.assertEqual(self.client.get(f"/api/reports/{report_id}/matches").status_code, 409)
+        repeated = self.client.post(
+            f"/api/reports/{report_id}/close",
+            json={"reason": "no_longer_searching"},
+        )
+        self.assertEqual(repeated.status_code, 409)
+
+    def test_rejected_claim_can_be_disputed_and_reviewed_once(self):
+        self.login("finder@example.test", "finder-password")
+        found_response = self.client.post(
+            "/api/reports",
+            json=self.report_body("found", "Silver thermos", "Silver insulated thermos with a black cap and side scratch."),
+        )
+        self.assertEqual(found_response.status_code, 200, found_response.text)
+        found_report_id = found_response.json()["report"]["id"]
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        intake = self.client.post(
+            f"/api/reports/{found_report_id}/intake",
+            json={
+                "confirmed_physical_receipt": True,
+                "storage_location": "Lost and Found Room - Shelf A2",
+                "private_detail": "A small maker's mark under base.",
+                "value_band": "low",
+                "sensitivity_level": 1,
+            },
+        )
+        self.assertEqual(intake.status_code, 200, intake.text)
+        self.logout()
+
+        self.login("claimant@example.test", "claimant-password")
+        claim_response = self.client.post(
+            "/api/claims",
+            json={
+                "report_id": found_report_id,
+                "evidence": "The thermos has a scratch on the side and a mark below its base. I can verify its contents.",
+            },
+        )
+        self.assertEqual(claim_response.status_code, 200, claim_response.text)
+        claim_id = claim_response.json()["claim"]["id"]
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        rejected = self.client.post(
+            f"/api/claims/{claim_id}/decision",
+            json={"action": "reject", "note": "The initial evidence was insufficient."},
+        )
+        self.assertEqual(rejected.status_code, 200, rejected.text)
+        self.logout()
+
+        self.login("claimant@example.test", "claimant-password")
+        appeal = self.client.post(
+            f"/api/claims/{claim_id}/dispute",
+            json={"reason": "I can provide another identifying detail that was not considered during the first review."},
+        )
+        self.assertEqual(appeal.status_code, 200, appeal.text)
+        self.assertEqual(appeal.json()["claim"]["status"], "disputed")
+        self.assertEqual(
+            self.client.post(
+                f"/api/claims/{claim_id}/dispute",
+                json={"reason": "I would also like to ask the office to reconsider the earlier decision."},
+            ).status_code,
+            409,
+        )
+        own_claim = next(item for item in self.client.get("/api/claims").json()["claims"] if item["id"] == claim_id)
+        self.assertIn("not considered", own_claim["appeal_note"])
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        office_claim = next(item for item in self.client.get("/api/claims").json()["claims"] if item["id"] == claim_id)
+        self.assertIn("not considered", office_claim["appeal_note"])
+        decision = self.client.post(
+            f"/api/claims/{claim_id}/decision",
+            json={
+                "action": "approve",
+                "note": "Review request considered and evidence rechecked.",
+                "verification_checks": ["distinctive_features", "date_location", "claimant_identity"],
+            },
+        )
+        self.assertEqual(decision.status_code, 200, decision.text)
+        self.assertEqual(decision.json()["claim"]["status"], "approved_for_collection")
 
 if __name__ == "__main__":
     unittest.main()
