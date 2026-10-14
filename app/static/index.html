@@ -75,6 +75,8 @@
       <button class="tab-button" type="button" data-view="report"><span>＋</span> New report</button>
       <button class="tab-button" type="button" data-view="my-reports"><span>▤</span> My reports</button>
       <button class="tab-button" type="button" data-view="my-claims"><span>◷</span> My claims <span id="claimNavCount" class="nav-count hidden">0</span></button>
+      <button class="tab-button" type="button" data-view="notifications"><span>♧</span> Notifications <span id="notificationNavCount" class="nav-count hidden">0</span></button>
+      <button id="activityNavButton" class="tab-button" type="button" data-view="activity"><span>✦</span> Activity & certificates</button>
       <button id="officeNavButton" class="tab-button office-tab hidden" type="button" data-view="office"><span>▦</span> Office console</button>
     </nav>
 
@@ -147,11 +149,25 @@
       <div id="myClaimsEmpty" class="empty-state hidden"><span class="empty-icon">◷</span><h3>No claims submitted</h3><p>When you submit a claim for an item, its review status will appear here.</p></div>
     </section>
 
+    <section id="notificationsView" class="content-view hidden">
+      <div class="section-heading"><div><p class="eyebrow">UPDATES</p><h2>Notifications</h2><p class="muted">Possible matches, claim reviews and contribution milestones appear here.</p></div><button id="readAllNotifications" class="button button-quiet button-small" type="button">Mark all read</button></div>
+      <div id="notificationsList" class="stack-list"></div>
+      <div id="notificationsEmpty" class="empty-state hidden"><span class="empty-icon">♧</span><h3>You're all caught up</h3><p>New match suggestions and review updates will appear here.</p></div>
+    </section>
+
+    <section id="activityView" class="content-view hidden">
+      <div class="section-heading"><div><p class="eyebrow">VERIFIED CONTRIBUTIONS</p><h2>Activity & certificates</h2><p class="muted">Earn recognition for found items that the campus office physically receives and verifies.</p></div><span class="count-pill">Verified activity only</span></div>
+      <div id="activityOverview" class="activity-overview"></div>
+      <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">RECOGNITION</p><h3>Your certificates</h3><p class="muted">Download certificates issued for earned milestones. Prototype certificates are not official college credentials.</p></div></div><div id="certificateList" class="certificate-grid"></div><div id="certificateEmpty" class="inline-empty hidden">No certificates yet. A certificate is issued when you reach a verified contribution milestone.</div></div>
+      <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">POINTS HISTORY</p><h3>Activity ledger</h3><p class="muted">Points are added only once for office-confirmed contribution events.</p></div></div><div id="activityLedger" class="stack-list"></div><div id="activityEmpty" class="inline-empty hidden">No verified activity points yet.</div></div>
+    </section>
+
     <section id="officeView" class="content-view hidden">
-      <div class="section-heading"><div><p class="eyebrow">AUTHORISED STAFF ONLY</p><h2>Campus office console</h2><p class="muted">Record physical intake and review ownership claims. Collection and handover are outside this prototype's scope.</p></div><span class="role-chip role-chip-office">Office staff</span></div>
+      <div class="section-heading"><div><p class="eyebrow">AUTHORISED STAFF ONLY</p><h2>Campus office console</h2><p class="muted">Confirm physical intake, review claims and record approved handovers with a tag check.</p></div><span class="role-chip role-chip-office">Office staff</span></div>
       <div id="officeStats" class="stats-grid"></div>
       <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">PHYSICAL CUSTODY</p><h3>Found items awaiting intake</h3><p class="muted">Assign a physical tag only after confirming the item has been received.</p></div></div><div id="intakeQueue" class="stack-list"></div><div id="intakeEmpty" class="inline-empty hidden">No found-item reports are waiting for intake.</div></div>
       <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">OWNERSHIP REVIEW</p><h3>Claims requiring attention</h3><p class="muted">Private evidence, internal risk level and tag details are never shown in the student view.</p></div></div><div id="officeClaims" class="stack-list"></div><div id="officeClaimsEmpty" class="inline-empty hidden">No claims have been submitted yet.</div></div>
+      <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">APPROVED CLAIMS</p><h3>Ready for physical handover</h3><p class="muted">Check the claimant, verify the physical tag and confirm the item is actually handed over.</p></div></div><div id="handoverQueue" class="stack-list"></div><div id="handoverEmpty" class="inline-empty hidden">No approved claims are awaiting handover.</div></div>
     </section>
 
     <footer class="app-footer"><span>LostLink · Campus property assistance</span><span>Potential matches are suggestions, not proof of ownership.</span></footer>
