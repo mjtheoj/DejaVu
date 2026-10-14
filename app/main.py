@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -170,6 +170,50 @@ def initialise_db() -> None:
                 details_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS notifications (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                event_key TEXT NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                entity_type TEXT,
+                entity_id TEXT,
+                read_at TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, event_key)
+            );
+            CREATE TABLE IF NOT EXISTS reward_ledger (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                event_key TEXT NOT NULL,
+                points INTEGER NOT NULL CHECK(points > 0),
+                reason TEXT NOT NULL,
+                report_id TEXT REFERENCES reports(id),
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, event_key)
+            );
+            CREATE TABLE IF NOT EXISTS certificates (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                tier TEXT NOT NULL,
+                threshold_points INTEGER NOT NULL,
+                points_at_issue INTEGER NOT NULL,
+                serial TEXT NOT NULL UNIQUE,
+                issued_at TEXT NOT NULL,
+                UNIQUE(user_id, tier)
+            );
+            CREATE TABLE IF NOT EXISTS handovers (
+                id TEXT PRIMARY KEY,
+                claim_id TEXT NOT NULL UNIQUE REFERENCES claims(id),
+                report_id TEXT NOT NULL UNIQUE REFERENCES reports(id),
+                tag_id TEXT NOT NULL,
+                claimant_id INTEGER NOT NULL REFERENCES users(id),
+                office_user_id INTEGER NOT NULL REFERENCES users(id),
+                handover_note TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_reward_ledger_user_created ON reward_ledger(user_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_reports_status_type ON reports(status, report_type);
             CREATE INDEX IF NOT EXISTS idx_reports_category ON reports(category);
             CREATE INDEX IF NOT EXISTS idx_claims_report ON claims(report_id, status);
@@ -280,6 +324,204 @@ def initialise_db() -> None:
 
 
 initialise_db()
+
+
+
+POINT_RULES = {
+    "verified_intake": 10,
+    "verified_return": 5,
+}
+CERTIFICATE_MILESTONES = [
+    {"tier": "Verified Finder", "threshold": 20, "key": "verified-finder"},
+    {"tier": "Campus Helper", "threshold": 50, "key": "campus-helper"},
+    {"tier": "Community Champion", "threshold": 100, "key": "community-champion"},
+]
+
+
+def notify_user(
+    conn: sqlite3.Connection,
+    user_id: int,
+    event_key: str,
+    title: str,
+    message: str,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+) -> None:
+    conn.execute(
+        """INSERT OR IGNORE INTO notifications
+           (id, user_id, event_key, title, message, entity_type, entity_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (uuid.uuid4().hex, user_id, event_key, title, message, entity_type, entity_id, now_iso()),
+    )
+
+
+def notify_role(
+    conn: sqlite3.Connection,
+    role: str,
+    event_key: str,
+    title: str,
+    message: str,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+) -> None:
+    for row in conn.execute("SELECT id FROM users WHERE role=?", (role,)).fetchall():
+        notify_user(conn, row["id"], event_key, title, message, entity_type, entity_id)
+
+
+def points_total(conn: sqlite3.Connection, user_id: int) -> int:
+    row = conn.execute(
+        "SELECT COALESCE(SUM(points), 0) AS total FROM reward_ledger WHERE user_id=?",
+        (user_id,),
+    ).fetchone()
+    return int(row["total"] if row else 0)
+
+
+def issue_milestone_certificates(conn: sqlite3.Connection, user_id: int) -> list[dict[str, Any]]:
+    total = points_total(conn, user_id)
+    user = conn.execute("SELECT display_name FROM users WHERE id=?", (user_id,)).fetchone()
+    if not user:
+        return []
+    issued: list[dict[str, Any]] = []
+    for milestone in CERTIFICATE_MILESTONES:
+        if total < milestone["threshold"]:
+            continue
+        certificate_id = uuid.uuid4().hex
+        serial = "LL-CERT-" + datetime.now().strftime("%Y") + "-" + secrets.token_hex(4).upper()
+        timestamp = now_iso()
+        cursor = conn.execute(
+            """INSERT OR IGNORE INTO certificates
+               (id, user_id, tier, threshold_points, points_at_issue, serial, issued_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (certificate_id, user_id, milestone["tier"], milestone["threshold"], total, serial, timestamp),
+        )
+        if cursor.rowcount:
+            issued.append({"id": certificate_id, "tier": milestone["tier"], "serial": serial})
+            notify_user(
+                conn, user_id, "certificate:" + milestone["key"],
+                "Recognition certificate earned",
+                "You reached the " + milestone["tier"] + " milestone. Your LostLink certificate is ready in Activity & Certificates.",
+                "certificate", certificate_id,
+            )
+    return issued
+
+
+def award_points(
+    conn: sqlite3.Connection,
+    user_id: int,
+    points: int,
+    event_key: str,
+    reason: str,
+    report_id: str,
+    actor_id: int,
+) -> bool:
+    """Award exactly once for an auditable, office-confirmed event."""
+    recipient = conn.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
+    if not recipient or recipient["role"] != "student" or points <= 0:
+        return False
+    cursor = conn.execute(
+        """INSERT OR IGNORE INTO reward_ledger
+           (id, user_id, event_key, points, reason, report_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (uuid.uuid4().hex, user_id, event_key, points, reason, report_id, now_iso()),
+    )
+    if not cursor.rowcount:
+        return False
+    audit(conn, actor_id, "reward_points_awarded", "report", report_id,
+          {"recipient_id": user_id, "points": points, "reason": reason, "event_key": event_key})
+    notify_user(
+        conn, user_id, "points:" + event_key,
+        "You earned " + str(points) + " activity points",
+        reason + ". Your verified contribution balance is now " + str(points_total(conn, user_id)) + " points.",
+        "report", report_id,
+    )
+    issue_milestone_certificates(conn, user_id)
+    return True
+
+
+def notify_possible_matches(conn: sqlite3.Connection, found_row: sqlite3.Row) -> int:
+    """Create deduplicated in-app alerts for students' open lost reports."""
+    from app.matching import matching_engine
+
+    found = dict(found_row)
+    if found.get("image_path"):
+        found["image_path"] = str(UPLOAD_DIR / found["image_path"])
+    lost_rows = conn.execute(
+        """SELECT r.* FROM reports r JOIN users u ON u.id=r.created_by
+           WHERE r.report_type='lost' AND r.status='open' AND u.role='student'
+           ORDER BY r.created_at DESC LIMIT 200"""
+    ).fetchall()
+    sent = 0
+    for lost_row in lost_rows:
+        lost = dict(lost_row)
+        if lost.get("image_path"):
+            lost["image_path"] = str(UPLOAD_DIR / lost["image_path"])
+        result = matching_engine.compare(lost, found)
+        # This threshold is a notification heuristic. Matching scores are not probabilities.
+        if result["score"] < 0.58:
+            continue
+        prior = conn.execute("SELECT 1 FROM notifications WHERE user_id=? AND event_key=?",
+                             (lost_row["created_by"], "match:" + lost_row["id"] + ":" + found_row["id"])).fetchone()
+        if prior:
+            continue
+        notify_user(
+            conn, lost_row["created_by"], "match:" + lost_row["id"] + ":" + found_row["id"],
+            "A possible item match was found",
+            "A found item may be relevant to your lost report " + lost_row["public_ref"] + ". Open LostLink to review the suggested match.",
+            "report", lost_row["id"],
+        )
+        sent += 1
+    return sent
+
+
+def certificate_pdf(display_name: str, tier: str, points_at_issue: int, serial: str, issued_at: str) -> bytes:
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.pdfgen import canvas
+
+    buffer = BytesIO()
+    width, height = landscape(A4)
+    pdf = canvas.Canvas(buffer, pagesize=(width, height))
+    pdf.setTitle("LostLink Recognition Certificate - " + tier)
+    pdf.setAuthor("LostLink")
+    pdf.setFillColor(colors.HexColor("#f6f7f2"))
+    pdf.rect(0, 0, width, height, fill=1, stroke=0)
+    pdf.setStrokeColor(colors.HexColor("#176c57"))
+    pdf.setLineWidth(3)
+    pdf.roundRect(24, 24, width - 48, height - 48, 20, stroke=1, fill=0)
+    pdf.setStrokeColor(colors.HexColor("#cfddcf"))
+    pdf.setLineWidth(1)
+    pdf.roundRect(34, 34, width - 68, height - 68, 15, stroke=1, fill=0)
+    pdf.setFillColor(colors.HexColor("#16322f"))
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawCentredString(width / 2, height - 83, "LOSTLINK  /  CAMPUS CONTRIBUTION")
+    pdf.setFillColor(colors.HexColor("#136d60"))
+    pdf.setFont("Helvetica-Bold", 31)
+    pdf.drawCentredString(width / 2, height - 145, "Certificate of Recognition")
+    pdf.setFillColor(colors.HexColor("#536961"))
+    pdf.setFont("Helvetica", 13)
+    pdf.drawCentredString(width / 2, height - 186, "This certificate recognises the verified campus contribution of")
+    pdf.setFillColor(colors.HexColor("#16322f"))
+    pdf.setFont("Helvetica-Bold", 26)
+    pdf.drawCentredString(width / 2, height - 230, display_name[:90])
+    pdf.setFillColor(colors.HexColor("#136d60"))
+    pdf.setFont("Helvetica-Bold", 20)
+    pdf.drawCentredString(width / 2, height - 270, tier)
+    pdf.setFillColor(colors.HexColor("#536961"))
+    pdf.setFont("Helvetica", 12)
+    pdf.drawCentredString(width / 2, height - 300, "For supporting campus lost-property recovery through verified contributions.")
+    pdf.drawCentredString(width / 2, height - 323, str(points_at_issue) + " activity points at the time of issue")
+    pdf.setStrokeColor(colors.HexColor("#d7e1d6"))
+    pdf.line(110, 90, width - 110, 90)
+    pdf.setFillColor(colors.HexColor("#64766d"))
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(62, 66, "Certificate ID: " + serial)
+    pdf.drawRightString(width - 62, 66, "Issued: " + issued_at[:10])
+    pdf.setFont("Helvetica-Oblique", 8)
+    pdf.drawCentredString(width / 2, 48, "Prototype recognition certificate; not an official CVR College credential.")
+    pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
 
 
 def user_payload(row: sqlite3.Row) -> dict[str, Any]:
@@ -412,6 +654,13 @@ class ClaimDecisionBody(BaseModel):
     note: str | None = Field(default=None, max_length=800)
 
 
+class HandoverBody(BaseModel):
+    confirmed_physical_handover: bool
+    claimant_identity_checked: bool
+    tag_id: str = Field(min_length=4, max_length=80)
+    note: str | None = Field(default=None, max_length=800)
+
+
 @app.get("/")
 def home():
     return FileResponse(ROOT / "app" / "static" / "index.html")
@@ -421,6 +670,8 @@ def home():
 def public_config():
     return {
         "demo_mode": DEMO_MODE,
+        "points": POINT_RULES,
+        "certificate_milestones": [{"tier": m["tier"], "threshold": m["threshold"]} for m in CERTIFICATE_MILESTONES],
         "categories": [{"value": key, "label": value} for key, value in CATEGORY_LABELS.items()],
         "locations": {
             "blocks": ["Block A", "Block B", "Block C", "Library", "Cafeteria", "Other / not sure"],
@@ -534,6 +785,14 @@ async def create_report(body: ReportBody, user: dict[str, Any] = Depends(authent
              body.location_room, body.location_area, status, user["id"], timestamp, timestamp),
         )
         audit(conn, user["id"], "report_created", "report", report_id, {"report_type": body.report_type})
+        if body.report_type == "found":
+            notify_role(conn, "office", "found-report:" + report_id, "Found-item report awaiting intake",
+                        "A new found-item report is waiting for physical office intake.", "report", report_id)
+            notify_user(conn, user["id"], "report-created:" + report_id, "Found report submitted",
+                        "Your found-item report is waiting for the office to confirm physical receipt.", "report", report_id)
+        else:
+            notify_user(conn, user["id"], "report-created:" + report_id, "Lost report submitted",
+                        "Your lost-item report is saved. LostLink can suggest possible matches as found items are received.", "report", report_id)
         row = read_report(conn, report_id)
     return {"report": serialise_report(row, internal=user["role"] == "office"),
             "message": "Lost report submitted." if body.report_type == "lost" else "Found-item report submitted for office intake. It will become searchable after staff confirm receipt."}
@@ -668,6 +927,15 @@ async def intake_found_item(
         )
         audit(conn, user["id"], "found_item_received_and_tagged", "report", report_id,
               {"tag_id": tag_id, "verification_level": "L" + str(level)})
+        reporter = conn.execute("SELECT role FROM users WHERE id=?", (row["created_by"],)).fetchone()
+        if reporter and reporter["role"] == "student":
+            award_points(
+                conn, row["created_by"], POINT_RULES["verified_intake"],
+                "verified-intake:" + report_id,
+                "Your found-item report was physically received and verified by the campus office",
+                report_id, user["id"]
+            )
+        notify_possible_matches(conn, read_report(conn, report_id))
         updated = read_report(conn, report_id)
     return {"report": serialise_report(updated, internal=True), "message": "Physical receipt recorded and tag assigned."}
 
@@ -707,6 +975,21 @@ async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authentic
             )
         audit(conn, user["id"], "claim_submitted", "claim", claim_id,
               {"report_id": body.report_id, "competing_claims": bool(active)})
+        notify_role(conn, "office", "claim-submitted:" + claim_id, "Ownership claim requires review",
+                    "A new ownership claim was submitted for item " + report["public_ref"] + ".", "claim", claim_id)
+        if active:
+            previous = conn.execute(
+                "SELECT DISTINCT claimant_id, id FROM claims WHERE report_id=? AND id<>? AND status='disputed'",
+                (body.report_id, claim_id)
+            ).fetchall()
+            for previous_claim in previous:
+                notify_user(
+                    conn, previous_claim["claimant_id"],
+                    "claim-dispute:" + previous_claim["id"] + ":" + claim_id,
+                    "A competing claim was submitted",
+                    "This item is on hold while authorised office staff review the competing claims.",
+                    "claim", previous_claim["id"]
+                )
         claim = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
     return {"claim": {"id": claim["id"], "status": claim["status"], "created_at": claim["created_at"],
                       "report": serialise_report(report), "message": "Claim submitted for review."}}
@@ -774,6 +1057,8 @@ async def update_claim_evidence(
                 (now_iso(), claim["report_id"])
             )
         audit(conn, user["id"], "claim_evidence_updated", "claim", claim_id)
+        notify_role(conn, "office", "claim-evidence:" + claim_id + ":" + now_iso()[:16],
+                    "Additional claim evidence submitted", "A claimant has added the requested evidence.", "claim", claim_id)
         updated = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
         report = read_report(conn, updated["report_id"])
     return {"claim": {"id": updated["id"], "status": updated["status"],
@@ -818,9 +1103,170 @@ async def decide_claim(
         )
         audit(conn, user["id"], "claim_review_decision", "claim", claim_id,
               {"decision": body.action, "new_status": new_status})
+        notice_text = {
+            "approve": "Your claim passed office verification. The office will complete the physical handover separately.",
+            "reject": "Your claim was not approved. Contact the campus office if you believe further review is needed.",
+            "request_more_evidence": "The office requested more evidence. Open My Claims to provide the requested information.",
+            "mark_disputed": "Your claim is on hold while the office reviews a dispute.",
+        }[body.action]
+        notice_title = {
+            "approve": "Claim verified",
+            "reject": "Claim review updated",
+            "request_more_evidence": "More evidence requested",
+            "mark_disputed": "Claim on hold",
+        }[body.action]
+        notify_user(conn, claim["claimant_id"], "claim-decision:" + claim_id + ":" + new_status,
+                    notice_title, notice_text, "claim", claim_id)
+        if body.action == "reject":
+            other_active = conn.execute(
+                "SELECT 1 FROM claims WHERE report_id=? AND id<>? AND status IN ('pending','disputed','needs_more_evidence')",
+                (claim["report_id"], claim_id)
+            ).fetchone()
+            if not other_active and report["status"] == "available":
+                conn.execute("UPDATE reports SET status='available', updated_at=? WHERE id=?", (now_iso(), claim["report_id"]))
         updated = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
     return {"claim": {"id": updated["id"], "status": updated["status"]},
             "message": "Claim review updated. Physical collection is not recorded by this module."}
+
+
+
+
+@app.post("/api/claims/{claim_id}/handover")
+async def record_handover(
+    claim_id: str,
+    body: HandoverBody,
+    user: dict[str, Any] = Depends(authenticated_user),
+):
+    require_office(user)
+    if not body.confirmed_physical_handover or not body.claimant_identity_checked:
+        raise HTTPException(status_code=422, detail="Confirm the physical handover and claimant identity.")
+    with connect_db() as conn:
+        claim = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
+        if not claim:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+        if claim["status"] != "approved_for_collection":
+            raise HTTPException(status_code=409, detail="Only an office-verified claim can proceed to handover.")
+        report = read_report(conn, claim["report_id"])
+        if report["status"] != "claim_approved" or not report["tag_id"]:
+            raise HTTPException(status_code=409, detail="The item is not in the approved handover state.")
+        if not secrets.compare_digest(str(body.tag_id).strip(), str(report["tag_id"])):
+            raise HTTPException(status_code=422, detail="The entered tag ID does not match the office record.")
+        timestamp = now_iso()
+        conn.execute(
+            """INSERT INTO handovers(id, claim_id, report_id, tag_id, claimant_id, office_user_id, handover_note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (uuid.uuid4().hex, claim_id, report["id"], report["tag_id"], claim["claimant_id"],
+             user["id"], body.note, timestamp),
+        )
+        conn.execute("UPDATE claims SET status='returned', reviewer_id=?, updated_at=? WHERE id=?",
+                     (user["id"], timestamp, claim_id))
+        conn.execute("UPDATE reports SET status='returned', updated_at=? WHERE id=?", (timestamp, report["id"]))
+        audit(conn, user["id"], "physical_handover_recorded", "claim", claim_id,
+              {"report_id": report["id"], "tag_id": report["tag_id"]})
+        award_points(
+            conn, report["created_by"], POINT_RULES["verified_return"],
+            "verified-return:" + report["id"],
+            "The reported item was returned to a verified owner",
+            report["id"], user["id"]
+        )
+        notify_user(conn, claim["claimant_id"], "handover:" + claim_id, "Item handover recorded",
+                    "The campus office recorded the return of the item. The claim is complete.",
+                    "claim", claim_id)
+        notify_user(conn, report["created_by"], "item-returned:" + report["id"], "A reported item was returned",
+                    "The office has completed a verified return associated with your found-item report.",
+                    "report", report["id"])
+    return {"claim_id": claim_id, "status": "returned", "message": "Physical handover recorded."}
+
+
+@app.get("/api/notifications")
+async def list_notifications(user: dict[str, Any] = Depends(authenticated_user)):
+    with connect_db() as conn:
+        rows = conn.execute(
+            """SELECT id, title, message, entity_type, entity_id, read_at, created_at
+               FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100""",
+            (user["id"],)
+        ).fetchall()
+        unread = conn.execute("SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND read_at IS NULL",
+                              (user["id"],)).fetchone()["n"]
+    return {"notifications": [dict(row) for row in rows], "unread_count": int(unread)}
+
+
+@app.post("/api/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    user: dict[str, Any] = Depends(authenticated_user),
+):
+    with connect_db() as conn:
+        cursor = conn.execute(
+            "UPDATE notifications SET read_at=? WHERE id=? AND user_id=?",
+            (now_iso(), notification_id, user["id"])
+        )
+        if not cursor.rowcount:
+            raise HTTPException(status_code=404, detail="Notification not found.")
+    return {"ok": True}
+
+
+@app.post("/api/notifications/read-all")
+async def mark_all_notifications_read(user: dict[str, Any] = Depends(authenticated_user)):
+    with connect_db() as conn:
+        conn.execute("UPDATE notifications SET read_at=? WHERE user_id=? AND read_at IS NULL",
+                     (now_iso(), user["id"]))
+    return {"ok": True}
+
+
+@app.get("/api/activity/me")
+async def my_activity(user: dict[str, Any] = Depends(authenticated_user)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Activity rewards are available to student accounts.")
+    with connect_db() as conn:
+        total = points_total(conn, user["id"])
+        ledger = conn.execute(
+            """SELECT points, reason, report_id, created_at FROM reward_ledger
+               WHERE user_id=? ORDER BY created_at DESC LIMIT 50""",
+            (user["id"],)
+        ).fetchall()
+        certificates = conn.execute(
+            """SELECT id, tier, threshold_points, points_at_issue, serial, issued_at
+               FROM certificates WHERE user_id=? ORDER BY threshold_points""",
+            (user["id"],)
+        ).fetchall()
+    next_milestone = next((m for m in CERTIFICATE_MILESTONES if total < m["threshold"]), None)
+    return {
+        "total_points": total,
+        "rules": POINT_RULES,
+        "ledger": [dict(row) for row in ledger],
+        "certificates": [dict(row) for row in certificates],
+        "next_milestone": next_milestone,
+        "points_to_next_milestone": max(0, next_milestone["threshold"] - total) if next_milestone else 0,
+        "milestones": [{"tier": m["tier"], "threshold": m["threshold"], "earned": total >= m["threshold"]}
+                       for m in CERTIFICATE_MILESTONES],
+    }
+
+
+@app.get("/api/certificates/{certificate_id}/download")
+async def download_certificate(
+    certificate_id: str,
+    user: dict[str, Any] = Depends(authenticated_user),
+):
+    with connect_db() as conn:
+        certificate = conn.execute("SELECT * FROM certificates WHERE id=?", (certificate_id,)).fetchone()
+        if not certificate:
+            raise HTTPException(status_code=404, detail="Certificate not found.")
+        if user["role"] != "office" and certificate["user_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="You can only download your own certificates.")
+        person = conn.execute("SELECT display_name FROM users WHERE id=?", (certificate["user_id"],)).fetchone()
+    try:
+        pdf = certificate_pdf(person["display_name"], certificate["tier"], certificate["points_at_issue"],
+                              certificate["serial"], certificate["issued_at"])
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Certificate generation dependency is not installed.")
+    safe_name = "LostLink-" + certificate["tier"].lower().replace(" ", "-") + "-" + certificate["serial"] + ".pdf"
+    return StreamingResponse(
+        iter([pdf]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="' + safe_name + '"',
+                 "Cache-Control": "private, no-store"},
+    )
 
 
 @app.get("/api/office/summary")
@@ -831,4 +1277,9 @@ async def office_summary(user: dict[str, Any] = Depends(authenticated_user)):
         available = conn.execute("SELECT COUNT(*) AS n FROM reports WHERE report_type='found' AND status='available'").fetchone()["n"]
         claims = conn.execute("SELECT COUNT(*) AS n FROM claims WHERE status IN ('pending','disputed','needs_more_evidence')").fetchone()["n"]
         disputed = conn.execute("SELECT COUNT(*) AS n FROM claims WHERE status='disputed'").fetchone()["n"]
-    return {"awaiting_intake": intake, "available_items": available, "active_claims": claims, "disputed_claims": disputed}
+        approved_handover = conn.execute("SELECT COUNT(*) AS n FROM claims WHERE status='approved_for_collection'").fetchone()["n"]
+        returned = conn.execute("SELECT COUNT(*) AS n FROM handovers").fetchone()["n"]
+        points_awarded = conn.execute("SELECT COALESCE(SUM(points),0) AS n FROM reward_ledger").fetchone()["n"]
+    return {"awaiting_intake": intake, "available_items": available, "active_claims": claims,
+            "disputed_claims": disputed, "approved_handover": approved_handover,
+            "returned_items": returned, "total_activity_points": points_awarded}
