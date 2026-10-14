@@ -651,7 +651,9 @@ async def intake_found_item(
         if row["report_type"] != "found" or row["status"] != "awaiting_intake":
             raise HTTPException(status_code=409, detail="Only found-item reports awaiting intake can be accepted.")
         level = effective_level(row["category"], body.value_band, body.sensitivity_level)
-        if level >= 3 and len((body.private_detail or "").strip()) < 8:
+        detail_length = len((body.private_detail or "").strip())
+        minimum_detail = 8 if level >= 3 else (6 if level >= 2 else 0)
+        if detail_length < minimum_detail:
             raise HTTPException(status_code=422, detail="For this risk level, record a private identifying detail or the approved verification method.")
         year = datetime.now().year
         prefix = "LL-CVR-" + str(year) + "-"
