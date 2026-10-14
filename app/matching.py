@@ -224,7 +224,7 @@ class MatchingEngine:
         elif category_score == 0:
             reasons.append("The item categories differ.")
         if image_score is not None and image_score >= 0.70:
-            reasons.append("The photo and available item information have visual-text similarity.")
+            reasons.append("The available photo evidence is visually compatible.")
         elif image_score is not None and image_score <= 0.30:
             reasons.append("The visual evidence is not very similar.")
         if location_score is not None and location_score >= 0.7:
