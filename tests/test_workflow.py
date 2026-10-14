@@ -162,6 +162,15 @@ class LostLinkWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(handover.status_code, 200, handover.text)
         self.assertEqual(handover.json()["status"], "returned")
+        repeated = self.client.post(
+            f"/api/claims/{claim_id}/handover",
+            json={
+                "confirmed_physical_handover": True,
+                "claimant_identity_checked": True,
+                "tag_id": tag_id,
+            },
+        )
+        self.assertEqual(repeated.status_code, 409)
         self.logout()
 
         # Verified intake + verified return is 15 points and is visible only to the contributor.
@@ -180,12 +189,6 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.assertEqual(own_claim["status"], "returned")
         self.assertNotIn("reviewer_note", own_claim)
         self.assertNotIn("evidence", own_claim)
-
-    def test_repeated_handover_does_not_duplicate_reward(self):
-        # Idempotency at the reward-event level is covered separately in test_rewards.py.
-        self.assertIn("verified_intake", main.POINT_RULES)
-        self.assertIn("verified_return", main.POINT_RULES)
-
 
 if __name__ == "__main__":
     unittest.main()
