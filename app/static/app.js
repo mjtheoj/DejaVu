@@ -5,6 +5,7 @@ let currentUser = null;
 let appConfig = null;
 let selectedClaimReport = null;
 let selectedCloseReportId = null;
+let selectedCloseReportType = null;
 
 const CATEGORY_ICONS = {
   stationery: "▤", clothing: "◈", bags_wallets: "▣", accessories: "◇",
@@ -15,7 +16,7 @@ const STATUS_LABELS = {
   open: "Open", awaiting_intake: "Awaiting office intake", available: "Available at office",
   claim_approved: "Awaiting handover", pending: "Under review", disputed: "Disputed · review required",
   needs_more_evidence: "More evidence requested", approved_for_collection: "Ready for handover",
-  rejected: "Not approved", returned: "Returned to owner", closed: "Closed"
+  rejected: "Not approved", returned: "Returned to owner", closed: "Closed", cancelled: "Withdrawn"
 };
 const escapeHTML = (value) => String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -279,8 +280,12 @@ async function loadMyReports() {
       const matchButton = report.report_type === "lost" && report.status === "open"
         ? '<button class="button button-primary button-small" type="button" data-matches="' + escapeHTML(report.id) + '">Find possible matches</button>'
         : "";
-      const closeButton = report.report_type === "lost" && report.status === "open"
-        ? '<button class="button button-quiet button-small" type="button" data-close-report="' + escapeHTML(report.id) + '">Close report</button>'
+      const canClose = (report.report_type === "lost" && report.status === "open") ||
+        (report.report_type === "found" && report.status === "awaiting_intake");
+      const closeButton = canClose
+        ? '<button class="button button-quiet button-small" type="button" data-close-report="' + escapeHTML(report.id) +
+          '" data-close-type="' + escapeHTML(report.report_type) + '">' +
+          (report.report_type === "found" ? "Withdraw report" : "Close report") + '</button>'
         : "";
       const type = report.report_type === "lost" ? "Lost report" : "Found report";
       const imageNote = report.report_type === "found" && report.status === "awaiting_intake"
@@ -530,7 +535,9 @@ function officeClaimCard(claim) {
     (claim.appeal_note ? '<div class="claim-appeal-note"><strong>CLAIMANT REVIEW REQUEST</strong><p>' + escapeHTML(claim.appeal_note) + '</p></div>' : "") +
     '<div class="internal-detail"><strong>INTERNAL VERIFICATION DETAIL</strong><small>' + escapeHTML(privateDetail) + "</small></div>" +
     '<div class="list-card-meta"><span>⌖ ' + escapeHTML(report.location) + "</span><span>Submitted " + escapeHTML(humanDateTime(claim.created_at)) + "</span></div>" +
-    (claim.status === "disputed" ? '<p class="field-hint">Resolve all competing active claims before approving any one claim.</p>' : "") +
+    (claim.status === "disputed" ? '<p class="field-hint">' + escapeHTML(claim.appeal_note
+      ? "This is a claimant-requested review of a previous rejection. Review the appeal note and evidence again."
+      : "Resolve all competing active claims before approving any one claim.") + '</p>' : "") +
     checklist + actions + "</article>";
 }
 
@@ -663,11 +670,21 @@ async function updateStorageLocation(reportId, currentLocation) {
   } catch (error) { showToast(error.message, true); }
 }
 
-async function openCloseReport(reportId) {
+async function openCloseReport(reportId, reportType) {
   selectedCloseReportId = reportId;
+  selectedCloseReportType = reportType;
   $("#closeReportError").textContent = "";
   $("#closeReportNote").value = "";
-  $("#closeReportReason").value = "no_longer_searching";
+  const isFound = reportType === "found";
+  $("#closeReportDialogTitle").textContent = isFound ? "Withdraw found report" : "Close lost report";
+  $("#closeReportDescription").textContent = isFound
+    ? "Withdraw this report only if you have not yet handed the physical item to the campus office. Once staff accept it and assign a tag, contact the office instead."
+    : "Close your search if you recovered the item elsewhere, no longer need to search, or submitted a duplicate. Closed reports stop generating match suggestions.";
+  $("#confirmCloseReportButton").textContent = isFound ? "Withdraw report" : "Close report";
+  $("#closeReportReason").innerHTML = isFound
+    ? '<option value="found_report_withdrawn">I cannot deliver the item to the office</option>'
+    : '<option value="recovered_elsewhere">I recovered the item elsewhere</option><option value="no_longer_searching">I no longer need to search</option><option value="duplicate">This is a duplicate report</option>';
+  $("#closeReportReason").value = isFound ? "found_report_withdrawn" : "no_longer_searching";
   $("#closeReportDialog").showModal();
 }
 
@@ -681,6 +698,7 @@ async function submitCloseReport(event) {
     });
     $("#closeReportDialog").close();
     selectedCloseReportId = null;
+    selectedCloseReportType = null;
     showToast(result.message, false);
     await loadMyReports();
   } catch (error) { $("#closeReportError").textContent = error.message; }
@@ -805,7 +823,7 @@ document.addEventListener("click", (event) => {
   const dispute = event.target.closest("[data-dispute-claim]");
   if (dispute) submitClaimDispute(dispute.dataset.disputeClaim);
   const closeReport = event.target.closest("[data-close-report]");
-  if (closeReport) openCloseReport(closeReport.dataset.closeReport);
+  if (closeReport) openCloseReport(closeReport.dataset.closeReport, closeReport.dataset.closeType);
   const decision = event.target.closest("[data-decision]");
   if (decision) submitDecision(decision.dataset.claimId, decision.dataset.decision);
   const handover = event.target.closest("[data-handover]");
@@ -828,8 +846,8 @@ $("#reportImage").addEventListener("change", () => {
 $("#cancelReport").addEventListener("click", () => navigate("browse"));
 $("#claimForm").addEventListener("submit", submitClaim);
 $("#closeReportForm").addEventListener("submit", submitCloseReport);
-$("#closeCloseReport").addEventListener("click", () => { $("#closeReportDialog").close(); selectedCloseReportId = null; });
-$("#cancelCloseReport").addEventListener("click", () => { $("#closeReportDialog").close(); selectedCloseReportId = null; });
+$("#closeCloseReport").addEventListener("click", () => { $("#closeReportDialog").close(); selectedCloseReportId = null; selectedCloseReportType = null; });
+$("#cancelCloseReport").addEventListener("click", () => { $("#closeReportDialog").close(); selectedCloseReportId = null; selectedCloseReportType = null; });
 $("#closeClaim").addEventListener("click", () => $("#claimDialog").close());
 $("#cancelClaim").addEventListener("click", () => $("#claimDialog").close());
 $("#closeMatches").addEventListener("click", () => $("#matchesPanel").classList.add("hidden"));
