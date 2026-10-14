@@ -447,15 +447,33 @@ function intakeCard(report) {
 
 function officeClaimCard(claim) {
   const report = claim.report;
-  const level = report.verification_level ? "L" + report.verification_level : "Not assigned";
+  const levelNumber = Number(report.verification_level || 3);
+  const level = "L" + levelNumber;
+  const minimumChecks = ({ 1: 2, 2: 3, 3: 4, 4: 4 })[levelNumber] || 4;
   const privateDetail = report.private_verification_detail || "No private verification detail recorded.";
+  const checks = [
+    ["distinctive_features", "Distinctive features / owner-only detail match"],
+    ["date_location", "Date and location are consistent"],
+    ["physical_inspection", "Physical item inspected"],
+    ["supporting_evidence", "Independent supporting evidence reviewed"],
+    ["owner_specific_detail", "Owner-specific detail checked"],
+    ["claimant_identity", "Claimant identity checked"]
+  ];
+  if (levelNumber >= 4) checks.push(["authorised_record", "Authorised record / custodian checked"]);
+  const checklist = '<div class="verification-checklist"><div class="verification-checklist-heading"><strong>Verification checklist</strong><span>' +
+    escapeHTML("Level " + levelNumber + " · minimum " + minimumChecks + " checks") +
+    '</span></div><p class="field-hint">Check the evidence you actually reviewed. Claimant identity is always required; restricted items also require an authorised-record check.</p>' +
+    '<div class="verification-check-grid">' + checks.map(([value, label]) =>
+      '<label class="verify-check"><input type="checkbox" data-verification-check="true" value="' + escapeHTML(value) + '"><span>' + escapeHTML(label) + '</span></label>'
+    ).join("") + '</div></div>';
   const actions = '<div class="decision-note"><input type="text" maxlength="800" data-note-for="' + escapeHTML(claim.id) +
     '" placeholder="Internal review note (optional)"></div><div class="card-actions">' +
     '<button class="button button-primary button-small" type="button" data-decision="approve" data-claim-id="' + escapeHTML(claim.id) + '">Verify claim</button>' +
     '<button class="button button-amber button-small" type="button" data-decision="request_more_evidence" data-claim-id="' + escapeHTML(claim.id) + '">Request evidence</button>' +
     '<button class="button button-danger button-small" type="button" data-decision="mark_disputed" data-claim-id="' + escapeHTML(claim.id) + '">Mark disputed</button>' +
     '<button class="button button-quiet button-small" type="button" data-decision="reject" data-claim-id="' + escapeHTML(claim.id) + '">Reject claim</button></div>';
-  return '<article class="list-card"><div class="list-card-head"><div><h3>' + escapeHTML(report.title) + " · " + escapeHTML(report.public_ref) +
+  return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '"><div class="list-card-head"><div><h3>' +
+    escapeHTML(report.title) + " · " + escapeHTML(report.public_ref) +
     '</h3><p>Claimant: ' + escapeHTML(claim.claimant_name) + " · " + escapeHTML(claim.claimant_email) + "</p></div><span class=\"" + statusClass(claim.status) +
     "\">" + escapeHTML(statusLabel(claim.status)) + "</span></div>" +
     '<div class="internal-meta"><span>Physical tag: ' + escapeHTML(report.tag_id || "Not assigned") + "</span><span>Verification: " + escapeHTML(level) +
@@ -464,7 +482,7 @@ function officeClaimCard(claim) {
     '<div class="internal-detail"><strong>INTERNAL VERIFICATION DETAIL</strong><small>' + escapeHTML(privateDetail) + "</small></div>" +
     '<div class="list-card-meta"><span>⌖ ' + escapeHTML(report.location) + "</span><span>Submitted " + escapeHTML(humanDateTime(claim.created_at)) + "</span></div>" +
     (claim.status === "disputed" ? '<p class="field-hint">Resolve all competing active claims before approving any one claim.</p>' : "") +
-    actions + "</article>";
+    checklist + actions + "</article>";
 }
 
 async function submitIntake(event) {
@@ -594,8 +612,12 @@ async function submitHandover(claimId, expectedTag) {
 async function submitDecision(claimId, action) {
   const noteInput = $('[data-note-for="' + CSS.escape(claimId) + '"]');
   const note = noteInput ? noteInput.value.trim() : "";
+  const card = $('[data-claim-card="' + CSS.escape(claimId) + '"]');
+  const verificationChecks = action === "approve" && card
+    ? $('[data-verification-check]:checked', card).map((input) => input.value)
+    : [];
   const prompts = {
-    approve: "Verify this claim only after reviewing the private evidence. It will then move to the handover queue.",
+    approve: "Verify this claim only after reviewing the private evidence and checking the required verification items. It will then move to the handover queue.",
     reject: "Reject this claim after reviewing the evidence?",
     request_more_evidence: "Ask the claimant for additional evidence?",
     mark_disputed: "Keep this claim on hold as disputed?"
@@ -603,7 +625,7 @@ async function submitDecision(claimId, action) {
   if (!window.confirm(prompts[action] || "Update claim review?")) return;
   try {
     const result = await api("/api/claims/" + encodeURIComponent(claimId) + "/decision", {
-      method: "POST", body: { action: action, note: note || null }
+      method: "POST", body: { action: action, note: note || null, verification_checks: verificationChecks }
     });
     showToast(result.message, false);
     loadOffice();
