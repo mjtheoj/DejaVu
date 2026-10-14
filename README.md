@@ -212,7 +212,7 @@ More implementation notes are available in [Architecture.md](Architecture.md).
     │       ├── app.js
     │       └── styles.css
     ├── scripts/
-    │   ├── run-jury-demo.ps1
+    │   ├── run-demo.ps1
     │   └── evaluate_matching.py
     ├── tests/
     │   ├── data/matching_benchmark.json
@@ -407,7 +407,7 @@ Run these commands from the repository root.
 
 4. Start the single-server local demo.
 
-       .\scripts\run-jury-demo.ps1
+       .\scripts\run-demo.ps1
 
 The launcher checks the virtual-environment Python, verifies the secret, performs an import preflight, creates the local data directories and starts one Uvicorn process at <code>http://127.0.0.1:8000</code>. Keep the terminal open while using the application and press Ctrl+C to stop it. Stop any older local server that is occupying port 8000 before starting.
 
