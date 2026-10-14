@@ -147,3 +147,24 @@ Stop the server first. Local SQLite and uploaded images live under `data/` by de
 ## Not yet available
 
 This run guide starts the standalone prototype. It does not connect the application to Campus Sync, institutional single sign-on, a campus-owned production database or a live physical lost-property desk. Those require approval and integration details from the college/Campus Sync administrators.
+
+
+## 10. Jury demo with two independent portals
+
+Complete the virtual-environment setup above first, then run this from the repository root in PowerShell:
+
+```powershell
+.\scripts\run-jury-demo.ps1
+```
+
+It opens a student session at `http://localhost:8000` and an office session at `http://127.0.0.1:8001`. Both use the same local SQLite database and upload folder, but the separate hostnames keep the session cookies isolated. Leave both PowerShell windows running during the presentation.
+
+| Role | Email | Password |
+|---|---|---|
+| Student 1 | `student@lostlink.local` | `student123` |
+| Student 2 | `student2@lostlink.local` | `student2123` |
+| Student 3 | `student3@lostlink.local` | `student3123` |
+| Student 4 | `student4@lostlink.local` | `student4123` |
+| Office staff | `office@lostlink.local` | `office123` |
+
+Use distinct student accounts to demonstrate competing claims and notifications. The database is shared between both app processes so updates made in one portal are visible to the other after refresh. These are demo credentials; do not use them on a shared/public deployment.
