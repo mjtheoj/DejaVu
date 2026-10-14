@@ -221,33 +221,102 @@ class MatchingEngine:
         score = sum(value * weight for _, value, weight in weighted) / max(total_weight, 0.001)
 
         reasons: list[str] = []
-        if text_score >= 0.34:
-            reasons.append("The descriptions contain related terms or concepts.")
-        if category_score >= 0.9:
-            reasons.append("The item categories match.")
-        elif category_score == 0:
-            reasons.append("The item categories differ.")
-        if image_score is not None and image_score >= 0.70:
-            reasons.append("The available photo evidence is visually compatible.")
-        elif image_score is not None and image_score <= 0.30:
-            reasons.append("The visual evidence is not very similar.")
-        if location_score is not None and location_score >= 0.7:
-            reasons.append("The reported locations are compatible.")
+
+        # Prefer explanations that quote actual values recorded on both reports.
+        category_names = {
+            "stationery": "Stationery & books", "clothing": "Clothing", "bags_wallets": "Bags & wallets",
+            "accessories": "Accessories", "electronics": "Electronics", "identity_documents": "Identity documents",
+            "keys_access": "Keys & access cards", "cash_jewellery": "Cash & jewellery",
+            "sports_instruments": "Sports equipment & instruments", "other": "Other",
+        }
+        if lost_cat and found_cat and lost_cat != found_cat:
+            left_label = category_names.get(str(lost_cat), str(lost_cat).replace("_", " ").title())
+            right_label = category_names.get(str(found_cat), str(found_cat).replace("_", " ").title())
+            reasons.append(f"Categories differ: {left_label} vs {right_label}.")
+
+        left_brand = str(lost.get("brand") or "").strip()
+        right_brand = str(found.get("brand") or "").strip()
+        def normal_brand(value: str) -> str:
+            return " ".join(re.findall(r"[a-z0-9]+", value.casefold()))
+        if left_brand and right_brand:
+            if normal_brand(left_brand) == normal_brand(right_brand):
+                reasons.append(f"Brand matches: {right_brand}.")
+            else:
+                reasons.append(f"Reported brands differ: {left_brand} vs {right_brand}.")
+
+        left_colour = str(lost.get("primary_color") or "").strip()
+        right_colour = str(found.get("primary_color") or "").strip()
+        if left_colour and right_colour:
+            if set(tokens(left_colour)) == set(tokens(right_colour)):
+                reasons.append(f"Colour matches: {right_colour}.")
+            else:
+                reasons.append(f"Reported colours differ: {left_colour} vs {right_colour}.")
+
+        def clean_value(value):
+            return " ".join(str(value or "").casefold().split())
+        left_room, right_room = clean_value(lost.get("location_room")), clean_value(found.get("location_room"))
+        left_area, right_area = clean_value(lost.get("location_area")), clean_value(found.get("location_area"))
+        left_block, right_block = clean_value(lost.get("location_block")), clean_value(found.get("location_block"))
+        left_floor, right_floor = clean_value(lost.get("location_floor")), clean_value(found.get("location_floor"))
+        if left_room and right_room and left_room == right_room:
+            reasons.append(f"Both reports mention room {str(found.get('location_room')).strip()}.")
+        elif left_area and right_area and left_area == right_area:
+            reasons.append(f"Both reports mention {str(found.get('location_area')).strip()}.")
+        elif left_block and right_block and left_block == right_block:
+            label = "Block " + str(found.get("location_block")).strip()
+            if left_floor and right_floor and left_floor == right_floor:
+                label += ", floor " + str(found.get("location_floor")).strip()
+            reasons.append(f"Both reports place the item in {label}.")
         elif location_score is not None and location_score <= 0.2:
-            reasons.append("The reported locations differ.")
-        if time_score is not None and time_score >= 0.7:
-            reasons.append("The reported dates are close.")
-        elif time_score is not None and time_score <= 0.2:
-            reasons.append("The reported dates are far apart.")
+            left_place = str(lost.get("location_area") or lost.get("location_block") or "an unspecified location").strip()
+            right_place = str(found.get("location_area") or found.get("location_block") or "an unspecified location").strip()
+            if left_place != right_place:
+                reasons.append(f"Reported locations differ: {left_place} vs {right_place}.")
+
+        left_time, right_time = _parse_date(lost.get("occurred_at")), _parse_date(found.get("occurred_at"))
+        if left_time and right_time:
+            minutes_apart = int(round(abs((left_time - right_time).total_seconds()) / 60))
+            if minutes_apart < 60:
+                time_phrase = "within an hour" if minutes_apart < 5 else f"about {minutes_apart} minutes apart"
+            elif minutes_apart < 24 * 60:
+                hours_apart = int(round(minutes_apart / 60))
+                time_phrase = f"about {hours_apart} hour{'s' if hours_apart != 1 else ''} apart"
+            else:
+                days_apart = int(round(minutes_apart / (24 * 60)))
+                time_phrase = f"about {days_apart} day{'s' if days_apart != 1 else ''} apart"
+            if minutes_apart <= 24 * 60 or (time_score is not None and time_score <= 0.2):
+                reasons.append(f"Reported times are {time_phrase}.")
+
+        left_features = set(tokens(str(lost.get("visible_features") or "")))
+        right_features = set(tokens(str(found.get("visible_features") or "")))
+        distinctive = {"scratch", "sticker", "zipper", "pocket", "pockets", "stripe", "logo", "crack",
+                       "stain", "hinge", "case", "strap", "loop", "mark", "dent", "button", "screen",
+                       "corner", "seam", "pattern", "silver", "gold", "white", "black", "blue", "red"}
+        shared_features = sorted((left_features & right_features) & distinctive)
+        if shared_features:
+            reasons.append("Shared visible details: " + ", ".join(shared_features[:3]) + ".")
+
+        if category_score >= 0.9 and not any(reason.startswith("Categories differ:") for reason in reasons):
+            reasons.append("Both reports use the same item category.")
+        if text_score >= 0.34 and not shared_features and not any(reason.startswith("Brand matches:") for reason in reasons):
+            overlap = sorted(word for word in set(tokens(_text_value(lost))) & set(tokens(_text_value(found))) if len(word) >= 4)
+            if overlap:
+                reasons.append("Shared description terms: " + ", ".join(overlap[:3]) + ".")
+            elif text_engine == "sentence_embeddings":
+                reasons.append("The descriptions are semantically similar according to sentence embeddings.")
+        if image_score is not None and image_score >= 0.70:
+            reasons.append("The available photos have visually compatible content (CLIP image similarity).")
+        elif image_score is not None and image_score <= 0.30:
+            reasons.append("The available photos are visually dissimilar (CLIP image similarity).")
         if not reasons:
-            reasons.append("There is limited supporting information; review carefully.")
+            reasons.append("There is limited overlap in recorded details; review the candidate manually.")
 
         strength = "strong" if score >= 0.72 else ("possible" if score >= 0.45 else "limited")
         engine = text_engine + (" + CLIP" if image_score is not None else "")
         return {
             "score": round(score, 4),
             "strength": strength,
-            "reasons": reasons[:4],
+            "reasons": reasons[:5],
             "signals": {
                 "text": round(text_score, 4),
                 "image": None if image_score is None else round(image_score, 4),

@@ -57,6 +57,29 @@ class MatchingTests(unittest.TestCase):
         self.assertIsNone(result["signals"]["time"])
         self.assertIn("text", result["signals"])
 
+    def test_match_reasons_quote_actual_brand_colour_location_and_time(self):
+        lost = {
+            "title": "Black Apple headphones", "description": "Black headphones last seen at the Library.",
+            "category": "electronics", "brand": "Apple", "primary_color": "black",
+            "location_area": "Library", "occurred_at": "2026-10-13T10:00:00",
+        }
+        found = {
+            "title": "Apple wireless headphones", "description": "Black headphones found at the Library.",
+            "category": "electronics", "brand": "Apple", "primary_color": "Black",
+            "location_area": "Library", "occurred_at": "2026-10-13T12:00:00",
+        }
+        reasons = " ".join(self.engine.compare(lost, found)["reasons"])
+        self.assertIn("Brand matches: Apple", reasons)
+        self.assertIn("Colour matches: Black", reasons)
+        self.assertIn("Both reports mention Library", reasons)
+        self.assertIn("about 2 hours apart", reasons)
+
+    def test_wrong_category_is_explained_with_actual_category_values(self):
+        lost = {"title": "Apple headphones", "description": "black wireless earbuds", "category": "electronics", "brand": "Apple"}
+        found = {"title": "Black earbuds pouch", "description": "wireless earbud case", "category": "accessories", "brand": "Apple"}
+        reasons = " ".join(self.engine.compare(lost, found)["reasons"])
+        self.assertIn("Categories differ: Electronics vs Accessories", reasons)
+
     def test_rank_returns_best_candidates_first(self):
         lost = {"title": "Blue backpack", "description": "blue backpack with pockets", "category": "bags_wallets"}
         candidates = [
