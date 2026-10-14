@@ -1,103 +1,52 @@
-# DejaVu · LostLink
+# LostLink — Campus Lost & Found
 
-LostLink is a campus lost-and-found prototype. It supports structured reports, optional photos, search and filtering, explainable candidate matching, office-confirmed physical intake, private claim review, in-app notifications, return tracking, and verified-contribution rewards.
+LostLink is a campus lost-property workflow designed to connect student reports with physical custody, staff-reviewed ownership claims and traceable handovers. It combines structured item reports, explainable candidate matching, private verification, a tag-based campus inventory and verified-contribution recognition.
 
-It is a standalone prototype, not a live integration with the official CVR College of Engineering Android app or its identity system.
+## Solution approach
 
-## Student workflow
+### One workflow from report to return
 
-1. Submit a lost or found report with description, category, date, block, floor, room/area and an optional photo.
-2. Search office-held found items by keyword, category, block/area, room and date range.
-3. Open possible matches for a lost report. Explanations use the available text, category, date, location and optional image signals.
-4. Submit private evidence for a found-item claim and track the review status.
-5. View in-app notifications, verified activity points and milestone certificates.
+1. **Report:** Students submit lost or found reports with item details, approximate time/place and an optional photo. Reports are acknowledged and followed up through in-app notifications.
+2. **Physical intake:** A found-item report remains outside public search until authorised office staff confirm physical receipt. Staff record the actual campus storage location, capture private identifying/verification details and assign a unique physical LostLink Tag ID.
+3. **Campus storage register:** Office staff can look up tagged items by their private tag IDs and recorded room/cabinet/shelf location. If an item is moved within campus, staff update its location; the old and new location are included in the audit trail.
+4. **Find possible matches:** Search and filtering help students discover available found items. The matching service ranks candidates and explains relevant text/category/date/location signals; a match is only a lead, never proof of ownership.
+5. **Verify a claim:** A claimant submits private ownership evidence. Authorised staff review the evidence and risk-based checklist, check identity, and resolve competing claims before approving one.
+6. **Tag-based physical return:** An approved claim enters the handover queue but does not mark the item as returned. Staff retrieve the item from its recorded campus location, compare its physical tag with the exact Tag ID in the record, check the claimant's identity and confirm physical handover. Incorrect tags and repeated handover attempts are rejected.
+7. **Close the record:** The item and claim are marked returned, and the workflow creates an auditable handover record and sends in-app notifications.
 
-Found reports remain unavailable in public search until office staff physically receive the item and assign a tag. Public records do not expose physical tag IDs, private verification details, estimated value bands, verification levels or raw matching scores.
+The central rule is **no item is released solely because a match looks convincing**. Physical custody, an approved claim, identity checks and the exact recorded Tag ID are separate controls.
 
-## Office workflow
+### Recognition for verified contributions
 
-1. Review found reports awaiting physical intake.
-2. Confirm physical receipt, record a private identifying detail or approved verification method, set internal value/sensitivity inputs, and assign a unique LostLink physical tag.
-3. Review private claim evidence. Resolve competing/disputed claims before approval.
-4. Approve, reject, request additional evidence or place a claim on hold.
-5. For an approved claim, compare the physical item's tag ID, check the claimant's identity and confirm the physical handover. The app records the handover and closes the claim.
+Rewards are attached to staff-confirmed events rather than raw form submissions: +10 points for a student-submitted found item after physical intake and tagging, and +5 points when a verified return is recorded. Idempotent event keys prevent duplicate awards. Milestone PDF certificates are available at 20, 50 and 100 points; prototype certificates explicitly state that they are not official college credentials.
 
-The AI ranker suggests candidates only; it does not prove ownership or approve a claim.
+### Privacy and accountability
 
-## Verified contribution points and certificates
+Student-facing search does not expose private Tag IDs, storage locations, private ownership evidence, internal verification details, value/risk fields or raw matching scores. These details stay in the office workflow. Role checks protect office actions; item intake, storage changes, claim decisions, handovers and reward awards are audited. Uploaded images are validated and re-encoded to remove embedded metadata.
 
-Points are awarded only for auditable office-confirmed events. Submitting a form alone earns no points.
+## Campus Sync integration direction
 
-- +10 points when the campus office physically receives and tags a student-submitted found item.
-- +5 points when the office records a verified return after an approved claim.
-- Duplicate event keys are ignored, so repeating the same API request cannot award points twice.
+LostLink is being designed as a feature within the Campus Sync student experience, with Campus Sync serving as the entry point for students and the campus office workflow supporting custody and handovers. The repository currently contains a standalone prototype; **it is not yet connected to Campus Sync or the college identity system**.
 
-Milestone certificates are issued once per student and can be downloaded as PDFs:
+The intended integration is to use college-approved institutional authentication and identity/role mapping, launch LostLink from Campus Sync (for example, through an approved embedded web view or application link), and host the API and item records in an environment approved by the college. The Campus Sync API/SDK, sign-in contract, deployment target and data-handling requirements must be confirmed before that integration can be implemented. See [Campus operations and integration](CAMPUS_OPERATIONS.md).
 
-- **Verified Finder:** 20 points
-- **Campus Helper:** 50 points
-- **Community Champion:** 100 points
+## Technology
 
-Certificate downloads state that they are prototype recognition documents and are not official CVR College credentials. Official branding or institutional recognition requires college approval.
+| Layer | Technology and role |
+|---|---|
+| Application API | Python, FastAPI and Pydantic request validation |
+| Prototype persistence | SQLite for reports, claims, private verification checks, notifications, storage records, handovers, reward ledger, certificates and audit events |
+| User interface | HTML, CSS and vanilla JavaScript; role-specific student and office views |
+| Image handling | Pillow validation, orientation correction and re-encoding |
+| Matching | Deterministic text/category/date/location baseline; optional Sentence Transformers semantic text embeddings and CLIP image/text similarity |
+| Recognition | ReportLab-generated milestone PDF certificates |
+| Quality checks | Python unit/workflow tests, JavaScript syntax check and GitHub Actions CI |
 
-## Notifications
+The default matcher is a lightweight, reproducible baseline. Pretrained semantic/image models are optional and must be explicitly installed and enabled. Similarity scores are not ownership probabilities, and model-based accuracy should not be claimed without evaluation against labelled campus data.
 
-The app creates in-app notifications for possible matches, found-item intake, claim submission/review, additional evidence requests, handover completion, points and certificate milestones. Users can see and mark only their own notifications as read. Notifications are not email, SMS or push notifications.
+SQLite and local file storage are suitable for prototype evaluation, not a claim of production readiness. A Campus Sync deployment should use college-approved hosting, institutional authentication, managed backups and retention rules, secure image/object storage, monitoring and a reviewed database/concurrency design.
 
-## Matching modes
+## Project documentation
 
-The default engine is a deterministic text baseline combined with category, location and date signals. It is intended as a reproducible baseline, not a learned semantic model.
-
-Optional pretrained modes can be enabled after installing the ML dependencies:
-
-    pip install -r requirements-ml.txt
-
-Set USE_SEMANTIC_MODEL=true for Sentence Transformers semantic text embeddings, and/or USE_CLIP_MODEL=true for optional image/image or image/text similarity. The first model load may download weights and require additional disk space, RAM and startup time. Confirm which mode actually loads before describing a demo as model-based. Missing or failed model loads fall back to the lightweight baseline. Similarity is not a probability of ownership.
-
-## Run locally on Windows
-
-Python 3.10 or later is recommended.
-
-    py -m venv .venv
-    .venv\Scripts\Activate.ps1
-    pip install -r requirements.txt
-    Copy-Item .env.example .env
-    python -m uvicorn app.main:app --reload
-
-Open http://127.0.0.1:8000.
-
-When DEMO_MODE=true, local sample data and demo accounts are available:
-
-- Student: student@lostlink.local / student123
-- Office: office@lostlink.local / office123
-
-These credentials are for local evaluation only. Do not expose a demo-mode server to the public internet. Set a strong random session secret before any shared deployment. SQLite data and uploaded images live under the local data/ directory, which is ignored by Git.
-
-## Suggested local demo sequence
-
-1. Sign in as the demo student and open the seeded lost backpack report under My Reports. Use Find possible matches to demonstrate candidate ranking and explanations.
-2. Submit a found-item report as the student. Sign in as the campus office and confirm physical receipt. The item receives a physical tag and the reporter earns 10 points.
-3. Repeat with a second found report and confirm intake. The student reaches the 20-point Verified Finder milestone and can download the prototype PDF certificate in Activity & Certificates.
-4. As the student, claim an available found item using private evidence. As office staff, review the evidence, approve the claim, then record the physical handover by entering the exact tag ID and confirming the identity/hand-over check.
-5. Return to the student's Notifications and Activity & Certificates sections to show match/review updates, the point ledger and the issued certificate.
-
-The demo data is illustrative. A demo intake action represents an office-confirmed event in the local database; it is not evidence of an actual campus recovery.
-
-## Tests
-
-Install test dependencies and run the full unit and workflow tests:
-
-    pip install -r requirements-dev.txt
-    python -m unittest discover -s tests -v
-
-The GitHub Actions workflow also compiles Python, checks JavaScript syntax, runs tests and imports the application.
-
-## Integration and production requirements
-
-- Replace the prototype block/floor/room options with the verified campus directory.
-- Obtain an approved integration point and authentication contract before linking to the official CVR Android app.
-- Replace demo login with institutional authentication.
-- Review role permissions, privacy, retention, upload controls, rate limiting, CSRF protection and operational logging.
-- Configure HTTPS, a strong session secret, data backups and controlled office access.
-- Approve reward policy, point thresholds and certificate language with the college before institutional use.
-- Evaluate matching against a labelled dataset and keyword baseline; do not publish unmeasured accuracy claims.
+- [Local development and run commands](LOCAL_DEVELOPMENT.md) — installation, environment, demo access, optional models and tests.
+- [Campus operations and integration](CAMPUS_OPERATIONS.md) — item custody, Tag ID returns, staff procedure and Campus Sync integration prerequisites.
