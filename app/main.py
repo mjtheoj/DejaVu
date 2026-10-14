@@ -133,6 +133,9 @@ def initialise_db() -> None:
                 report_type TEXT NOT NULL CHECK(report_type IN ('lost', 'found')),
                 title TEXT NOT NULL,
                 description TEXT NOT NULL,
+                brand TEXT,
+                primary_color TEXT,
+                visible_features TEXT,
                 category TEXT NOT NULL,
                 occurred_at TEXT,
                 location_block TEXT,
@@ -141,6 +144,8 @@ def initialise_db() -> None:
                 location_area TEXT,
                 image_path TEXT,
                 status TEXT NOT NULL,
+                closure_reason TEXT,
+                closure_note TEXT,
                 created_by INTEGER NOT NULL REFERENCES users(id),
                 tag_id TEXT UNIQUE,
                 storage_location TEXT,
@@ -157,6 +162,8 @@ def initialise_db() -> None:
                 claimant_id INTEGER NOT NULL REFERENCES users(id),
                 evidence TEXT NOT NULL,
                 status TEXT NOT NULL,
+                appeal_note TEXT,
+                appeal_count INTEGER NOT NULL DEFAULT 0,
                 reviewer_id INTEGER REFERENCES users(id),
                 reviewer_note TEXT,
                 created_at TEXT NOT NULL,
@@ -235,6 +242,24 @@ def initialise_db() -> None:
             "UPDATE reports SET storage_location=? WHERE tag_id IS NOT NULL AND (storage_location IS NULL OR TRIM(storage_location)='')",
             ("Location needs confirmation",),
         )
+        # Backward-compatible migrations for richer item details and report closure.
+        report_columns = {row["name"] for row in conn.execute("PRAGMA table_info(reports)").fetchall()}
+        for column, declaration in (
+            ("brand", "TEXT"),
+            ("primary_color", "TEXT"),
+            ("visible_features", "TEXT"),
+            ("closure_reason", "TEXT"),
+            ("closure_note", "TEXT"),
+        ):
+            if column not in report_columns:
+                conn.execute(f"ALTER TABLE reports ADD COLUMN {column} {declaration}")
+        claim_columns = {row["name"] for row in conn.execute("PRAGMA table_info(claims)").fetchall()}
+        for column, declaration in (
+            ("appeal_note", "TEXT"),
+            ("appeal_count", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in claim_columns:
+                conn.execute(f"ALTER TABLE claims ADD COLUMN {column} {declaration}")
         if not DEMO_MODE:
             return
 
@@ -625,6 +650,9 @@ def serialise_report(row: sqlite3.Row, internal: bool = False) -> dict[str, Any]
         "report_type": row["report_type"],
         "title": row["title"],
         "description": row["description"],
+        "brand": row["brand"],
+        "primary_color": row["primary_color"],
+        "visible_features": row["visible_features"],
         "category": row["category"],
         "category_label": CATEGORY_LABELS.get(row["category"], row["category"]),
         "occurred_at": row["occurred_at"],
@@ -682,11 +710,24 @@ class ReportBody(BaseModel):
     title: str = Field(min_length=4, max_length=100)
     description: str = Field(min_length=10, max_length=1200)
     category: str
+    # Optional public characteristics improve search/matching; never put secret proof here.
+    brand: str | None = Field(default=None, max_length=80)
+    primary_color: str | None = Field(default=None, max_length=60)
+    visible_features: str | None = Field(default=None, max_length=400)
     occurred_at: str | None = None
     location_block: str | None = Field(default=None, max_length=80)
     location_floor: str | None = Field(default=None, max_length=40)
     location_room: str | None = Field(default=None, max_length=80)
     location_area: str | None = Field(default=None, max_length=120)
+
+
+class ReportCloseBody(BaseModel):
+    reason: Literal["recovered_elsewhere", "no_longer_searching", "duplicate"]
+    note: str | None = Field(default=None, max_length=400)
+
+
+class ClaimDisputeBody(BaseModel):
+    reason: str = Field(min_length=20, max_length=1000)
 
 
 class IntakeBody(BaseModel):
@@ -829,6 +870,10 @@ async def list_reports(
 
 @app.post("/api/reports")
 async def create_report(body: ReportBody, user: dict[str, Any] = Depends(authenticated_user)):
+    if len(body.title.strip()) < 4:
+        raise HTTPException(status_code=422, detail="Enter an item name of at least 4 characters.")
+    if len(body.description.strip()) < 10:
+        raise HTTPException(status_code=422, detail="Add at least 10 characters describing the item.")
     if body.category not in CATEGORY_LABELS:
         raise HTTPException(status_code=422, detail="Choose a valid item category.")
     if not (body.location_block or body.location_area):
@@ -839,13 +884,15 @@ async def create_report(body: ReportBody, user: dict[str, Any] = Depends(authent
     status = "open" if body.report_type == "lost" else "awaiting_intake"
     with connect_db() as conn:
         conn.execute(
-            """INSERT INTO reports(id, public_ref, report_type, title, description, category,
-               occurred_at, location_block, location_floor, location_room, location_area, status,
-               created_by, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO reports(id, public_ref, report_type, title, description, brand, primary_color,
+               visible_features, category, occurred_at, location_block, location_floor, location_room,
+               location_area, status, created_by, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (report_id, public_ref, body.report_type, body.title.strip(), body.description.strip(),
-             body.category, body.occurred_at, body.location_block, body.location_floor,
-             body.location_room, body.location_area, status, user["id"], timestamp, timestamp),
+             (body.brand or "").strip() or None, (body.primary_color or "").strip() or None,
+             (body.visible_features or "").strip() or None, body.category, body.occurred_at,
+             body.location_block, body.location_floor, body.location_room, body.location_area,
+             status, user["id"], timestamp, timestamp),
         )
         audit(conn, user["id"], "report_created", "report", report_id, {"report_type": body.report_type})
         if body.report_type == "found":
@@ -860,6 +907,36 @@ async def create_report(body: ReportBody, user: dict[str, Any] = Depends(authent
         row = read_report(conn, report_id)
     return {"report": serialise_report(row, internal=user["role"] == "office"),
             "message": "Lost report submitted." if body.report_type == "lost" else "Found-item report submitted for office intake. It will become searchable after staff confirm receipt."}
+
+
+@app.post("/api/reports/{report_id}/close")
+async def close_lost_report(
+    report_id: str,
+    body: ReportCloseBody,
+    user: dict[str, Any] = Depends(authenticated_user),
+):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only the report owner can close a lost report.")
+    with connect_db() as conn:
+        report = read_report(conn, report_id)
+        if report["created_by"] != user["id"]:
+            raise HTTPException(status_code=404, detail="Report not found.")
+        if report["report_type"] != "lost":
+            raise HTTPException(status_code=409, detail="Only lost reports can be closed by their reporter.")
+        if report["status"] != "open":
+            raise HTTPException(status_code=409, detail="Only an open lost report can be closed.")
+        timestamp = now_iso()
+        conn.execute(
+            "UPDATE reports SET status='closed', closure_reason=?, closure_note=?, updated_at=? WHERE id=?",
+            (body.reason, (body.note or "").strip() or None, timestamp, report_id),
+        )
+        audit(conn, user["id"], "lost_report_closed", "report", report_id,
+              {"reason": body.reason, "note": (body.note or "").strip() or None})
+        notify_user(conn, user["id"], "report-closed:" + report_id, "Lost report closed",
+                    "Your lost report has been closed. You can still view its record in My Reports.",
+                    "report", report_id)
+        updated = read_report(conn, report_id)
+    return {"report": serialise_report(updated), "message": "Lost report closed."}
 
 
 @app.post("/api/reports/{report_id}/image")
@@ -932,6 +1009,8 @@ async def get_matches(report_id: str, user: dict[str, Any] = Depends(authenticat
         lost = read_report(conn, report_id)
         if lost["report_type"] != "lost":
             raise HTTPException(status_code=400, detail="Matches are generated from a lost-item report.")
+        if lost["status"] != "open":
+            raise HTTPException(status_code=409, detail="Only an open lost report can be matched.")
         if user["role"] != "office" and lost["created_by"] != user["id"]:
             raise HTTPException(status_code=403, detail="You can only view matches for your own lost reports.")
         candidates = conn.execute(
@@ -1116,6 +1195,8 @@ async def list_claims(user: dict[str, Any] = Depends(authenticated_user)):
                 "status": claim["status"],
                 "created_at": claim["created_at"],
                 "updated_at": claim["updated_at"],
+                "appeal_note": claim["appeal_note"],
+                "appeal_count": claim["appeal_count"],
                 "report": serialise_report(report, internal=internal),
             }
             if internal:
@@ -1164,6 +1245,46 @@ async def update_claim_evidence(
                       "report": serialise_report(report), "message": "Additional evidence submitted."}}
 
 
+@app.post("/api/claims/{claim_id}/dispute")
+async def dispute_rejected_claim(
+    claim_id: str,
+    body: ClaimDisputeBody,
+    user: dict[str, Any] = Depends(authenticated_user),
+):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only a student claimant can request a review.")
+    reason = body.reason.strip()
+    if len(reason) < 20:
+        raise HTTPException(status_code=422, detail="Explain why the decision should be reviewed (at least 20 characters).")
+    with connect_db() as conn:
+        claim = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
+        if not claim or claim["claimant_id"] != user["id"]:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+        if claim["status"] != "rejected":
+            raise HTTPException(status_code=409, detail="Only a rejected claim can be disputed by its claimant.")
+        if int(claim["appeal_count"] or 0) >= 1:
+            raise HTTPException(status_code=409, detail="This claim has already used its one review request.")
+        report = read_report(conn, claim["report_id"])
+        if report["status"] != "available":
+            raise HTTPException(status_code=409, detail="The item is no longer available for another claim review.")
+        timestamp = now_iso()
+        conn.execute(
+            "UPDATE claims SET status='disputed', appeal_note=?, appeal_count=appeal_count+1, updated_at=? WHERE id=?",
+            (reason, timestamp, claim_id),
+        )
+        audit(conn, user["id"], "claim_decision_disputed", "claim", claim_id,
+              {"reason": reason, "appeal_count": 1})
+        notify_role(conn, "office", "claim-appeal:" + claim_id, "Claim decision review requested",
+                    "A claimant has requested a review of a rejected claim for item " + report["public_ref"] + ".",
+                    "claim", claim_id)
+        notify_user(conn, user["id"], "claim-appeal-confirmation:" + claim_id,
+                    "Review request submitted", "Your claim decision has been sent to the campus office for review.",
+                    "claim", claim_id)
+        updated = conn.execute("SELECT * FROM claims WHERE id=?", (claim_id,)).fetchone()
+    return {"claim": {"id": updated["id"], "status": updated["status"]},
+            "message": "Review request submitted. Your claim is marked disputed until office staff review it."}
+
+
 @app.post("/api/claims/{claim_id}/decision")
 async def decide_claim(
     claim_id: str,
@@ -1176,7 +1297,7 @@ async def decide_claim(
         if not claim:
             raise HTTPException(status_code=404, detail="Claim not found.")
         report = read_report(conn, claim["report_id"])
-        if claim["status"] in {"rejected", "approved_for_collection"}:
+        if claim["status"] in {"rejected", "approved_for_collection", "returned"}:
             raise HTTPException(status_code=409, detail="This claim has already reached a final review state.")
         if body.action == "approve":
             others = conn.execute(
@@ -1362,6 +1483,51 @@ async def my_activity(user: dict[str, Any] = Depends(authenticated_user)):
         "points_to_next_milestone": max(0, next_milestone["threshold"] - total) if next_milestone else 0,
         "milestones": [{"tier": m["tier"], "threshold": m["threshold"], "earned": total >= m["threshold"]}
                        for m in CERTIFICATE_MILESTONES],
+    }
+
+
+@app.get("/api/leaderboard")
+async def contribution_leaderboard(user: dict[str, Any] = Depends(authenticated_user)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="The student contribution leaderboard is available to student accounts.")
+    with connect_db() as conn:
+        rows = conn.execute(
+            """SELECT u.id, u.display_name, COALESCE(SUM(l.points), 0) AS total_points,
+                      COUNT(DISTINCT l.report_id) AS verified_reports
+               FROM users u JOIN reward_ledger l ON l.user_id=u.id
+               WHERE u.role='student'
+               GROUP BY u.id, u.display_name
+               HAVING SUM(l.points) > 0
+               ORDER BY total_points DESC, u.display_name COLLATE NOCASE ASC"""
+        ).fetchall()
+    leaders = []
+    previous_points = None
+    current_rank = 0
+    my_rank = None
+    my_points = 0
+    for position, row in enumerate(rows, start=1):
+        points = int(row["total_points"])
+        if points != previous_points:
+            current_rank = position
+            previous_points = points
+        entry = {
+            "rank": current_rank,
+            "display_name": row["display_name"],
+            "total_points": points,
+            "verified_reports": int(row["verified_reports"]),
+        }
+        if int(row["id"]) == int(user["id"]):
+            my_rank = current_rank
+            my_points = points
+        if len(leaders) < 10:
+            leaders.append(entry)
+    return {
+        "leaders": leaders,
+        "my_rank": my_rank,
+        "my_total_points": my_points,
+        "participant_count": len(rows),
+        "updated_at": now_iso(),
+        "privacy_note": "Only display names and verified contribution totals are shown; emails and claim details are not included.",
     }
 
 
