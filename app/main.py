@@ -874,6 +874,11 @@ async def create_report(body: ReportBody, user: dict[str, Any] = Depends(authent
         raise HTTPException(status_code=422, detail="Enter an item name of at least 4 characters.")
     if len(body.description.strip()) < 10:
         raise HTTPException(status_code=422, detail="Add at least 10 characters describing the item.")
+    if body.occurred_at:
+        try:
+            datetime.fromisoformat(body.occurred_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Use a valid ISO date and time, or leave the date blank if unknown.")
     if body.category not in CATEGORY_LABELS:
         raise HTTPException(status_code=422, detail="Choose a valid item category.")
     if not (body.location_block or body.location_area):
