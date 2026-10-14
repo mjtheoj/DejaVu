@@ -191,6 +191,7 @@ async function loadBrowse() {
     q: $("#filterQuery").value,
     category: $("#filterCategory").value,
     block: $("#filterBlock").value,
+    room: $("#filterRoom") ? $("#filterRoom").value : "",
     date_from: $("#filterDateFrom") ? $("#filterDateFrom").value : "",
     date_to: $("#filterDateTo") ? $("#filterDateTo").value : ""
   });
@@ -208,6 +209,7 @@ function resetSearch() {
   $("#filterQuery").value = "";
   $("#filterCategory").value = "";
   $("#filterBlock").value = "";
+  if ($("#filterRoom")) $("#filterRoom").value = "";
   if ($("#filterDateFrom")) $("#filterDateFrom").value = "";
   if ($("#filterDateTo")) $("#filterDateTo").value = "";
   loadBrowse();
