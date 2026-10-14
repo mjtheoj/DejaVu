@@ -188,7 +188,7 @@ input::placeholder, textarea::placeholder { color: #a4aea7; }
 .status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border-radius: 7px; color: #67766e; background: #f0f3ee; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .status-pending, .status-awaiting_intake, .status-needs_more_evidence { color: #86631f; background: #fff3d9; }
 .status-disputed, .status-rejected { color: #9b4640; background: #fff0ee; }
-.status-approved_for_collection, .status-available, .status-open { color: #176c57; background: #e6f6ed; }
+.status-approved_for_collection, .status-available, .status-open, .status-returned { color: #176c57; background: #e6f6ed; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .matches-panel { margin-top: 30px; padding-top: 25px; border-top: 1px solid var(--line); }
 .matches-panel .section-heading { align-items: center; }
