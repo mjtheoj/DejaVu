@@ -1,7 +1,9 @@
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 
+from PIL import Image
 from fastapi.testclient import TestClient
 
 import app.main as main
@@ -477,6 +479,143 @@ class LostLinkWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(decision.status_code, 200, decision.text)
         self.assertEqual(decision.json()["claim"]["status"], "approved_for_collection")
+
+
+    def _image_bytes(self, variant=0):
+        image = Image.new("RGB", (64, 64))
+        for y in range(64):
+            for x in range(64):
+                if variant == 0:
+                    image.putpixel((x, y), ((x * 17 + y * 3) % 256, (y * 11 + x * 5) % 256, (x * y + 43) % 256))
+                else:
+                    image.putpixel((x, y), ((255 - x * 7 - y * 13) % 256, (x * 2 + y * 19 + 71) % 256, (x * 9 + y * 23) % 256))
+        output = BytesIO()
+        image.save(output, format="PNG")
+        return output.getvalue()
+
+    def test_claim_evidence_rejects_image_already_used_on_a_report(self):
+        self.login("finder@example.test", "finder-password")
+        found = self.client.post(
+            "/api/reports",
+            json=self.report_body("found", "Black headphones", "Black over-ear headphones with a padded band and silver hinge."),
+        )
+        self.assertEqual(found.status_code, 200, found.text)
+        report_id = found.json()["report"]["id"]
+        original_image = self._image_bytes(0)
+        upload = self.client.post(
+            f"/api/reports/{report_id}/image",
+            files={"file": ("headphones.png", original_image, "image/png")},
+        )
+        self.assertEqual(upload.status_code, 200, upload.text)
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        intake = self.client.post(
+            f"/api/reports/{report_id}/intake",
+            json={
+                "confirmed_physical_receipt": True,
+                "storage_location": "Lost and Found Room - Shelf C1",
+                "private_detail": "Owner-only detail: small initials inside the ear cup.",
+                "value_band": "medium",
+                "sensitivity_level": 1,
+            },
+        )
+        self.assertEqual(intake.status_code, 200, intake.text)
+        self.logout()
+
+        self.login("claimant@example.test", "claimant-password")
+        claim = self.client.post(
+            "/api/claims",
+            json={
+                "report_id": report_id,
+                "evidence": "I can identify the serial placement and the initials inside the left ear cup.",
+                "evidence_types": ["distinctive_features", "purchase_or_receipt"],
+            },
+        )
+        self.assertEqual(claim.status_code, 200, claim.text)
+        claim_id = claim.json()["claim"]["id"]
+        duplicate = self.client.post(
+            f"/api/claims/{claim_id}/evidence-image",
+            files={"file": ("same-headphones.png", original_image, "image/png")},
+        )
+        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+        self.assertIn("duplicates or closely matches", duplicate.json()["detail"])
+        listed_claim = next(item for item in self.client.get("/api/claims").json()["claims"] if item["id"] == claim_id)
+        self.assertEqual(listed_claim["evidence_types"], ["distinctive_features", "purchase_or_receipt"])
+        self.assertFalse(listed_claim["evidence_image_available"])
+        self.logout()
+
+    def test_private_claim_evidence_image_is_only_visible_to_claimant_and_office(self):
+        self.login("finder@example.test", "finder-password")
+        found = self.client.post(
+            "/api/reports",
+            json=self.report_body("found", "Green water bottle", "Green steel bottle with a rubber base and a narrow lid."),
+        )
+        self.assertEqual(found.status_code, 200, found.text)
+        report_id = found.json()["report"]["id"]
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        intake = self.client.post(
+            f"/api/reports/{report_id}/intake",
+            json={
+                "confirmed_physical_receipt": True,
+                "storage_location": "Lost and Found Room - Shelf C2",
+                "private_detail": "A tiny blue mark below the cap.",
+                "value_band": "low",
+                "sensitivity_level": 1,
+            },
+        )
+        self.assertEqual(intake.status_code, 200, intake.text)
+        self.logout()
+
+        self.login("claimant@example.test", "claimant-password")
+        claim = self.client.post(
+            "/api/claims",
+            json={
+                "report_id": report_id,
+                "evidence": "I have a purchase receipt and can describe the unusual rubber base underneath.",
+                "evidence_types": ["purchase_or_receipt", "distinctive_features"],
+            },
+        )
+        self.assertEqual(claim.status_code, 200, claim.text)
+        claim_id = claim.json()["claim"]["id"]
+        image = self._image_bytes(1)
+        uploaded = self.client.post(
+            f"/api/claims/{claim_id}/evidence-image",
+            files={"file": ("receipt-context.png", image, "image/png")},
+        )
+        self.assertEqual(uploaded.status_code, 200, uploaded.text)
+        preview = self.client.get(f"/api/claims/{claim_id}/evidence-image")
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.headers.get("content-type"), "image/jpeg")
+        listed = next(item for item in self.client.get("/api/claims").json()["claims"] if item["id"] == claim_id)
+        self.assertTrue(listed["evidence_image_available"])
+        self.logout()
+
+        self.login("finder@example.test", "finder-password")
+        forbidden = self.client.get(f"/api/claims/{claim_id}/evidence-image")
+        self.assertEqual(forbidden.status_code, 404)
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        staff_preview = self.client.get(f"/api/claims/{claim_id}/evidence-image")
+        self.assertEqual(staff_preview.status_code, 200)
+
+    def test_demo_mode_creates_independent_student_logins(self):
+        main.DEMO_MODE = True
+        main.initialise_db()
+        for email, password in (
+            ("student2@lostlink.local", "student2123"),
+            ("student3@lostlink.local", "student3123"),
+            ("student4@lostlink.local", "student4123"),
+        ):
+            response = self.client.post("/api/login", json={"email": email, "password": password})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["user"]["role"], "student")
+            self.client.post("/api/logout")
+        main.DEMO_MODE = False
+
 
 if __name__ == "__main__":
     unittest.main()
