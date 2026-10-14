@@ -62,7 +62,7 @@ flowchart LR
 
 ### Stage A — Report and discover
 
-Students can create lost or found reports with item title, category, description, approximate date/time, campus block/area, room/floor information and an optional image. Search supports keywords and filters including category, block/area, room and date.
+Students can create lost or found reports with item title, category and description, plus a campus block/building or nearby area. Room, floor, approximate date/time, brand/make, main colour, visible characteristics and photographs are optional. The API validates report text and ISO date/time. Optional public characteristics also contribute to the matching baseline. Search supports keywords and filters including category, block/area, room and date.
 
 Lost reports remain open while owners search. Found reports begin in **Awaiting office intake**. A found report is not available for other students to claim merely because a form was submitted.
 
@@ -86,7 +86,7 @@ The system creates in-app notifications when it finds a possible match, includin
 
 The claimant submits private ownership evidence. Authorised office staff review the evidence and an item-risk-based verification checklist. The workflow requires claimant identity verification; restricted/high-sensitivity items also require an authorised-record/custodian check. Competing active claims hold the item for review rather than allowing automatic first-come-first-served release.
 
-Office staff can approve, reject, request more evidence or mark a claim disputed. The claimant can see their own claim status but not internal review notes or another claimant’s private evidence.
+Office staff can approve, reject, request more evidence or mark a claim disputed. A claimant whose claim is rejected can submit one formal review request with a reason; it returns the claim to the office review queue and the note is shown only to the claimant and authorised office staff. The claimant can see their own claim status but not internal review notes or another claimant’s private evidence.
 
 ### Stage E — Physical return by Tag ID
 
@@ -241,7 +241,7 @@ flowchart TD
 | Total reaches 50 points | Campus Helper |
 | Total reaches 100 points | Community Champion |
 
-Unique event keys prevent the same event from awarding points repeatedly through a retried request. Certificates are downloadable PDFs and state they are prototype recognition documents, not official CVR College credentials. A real college recognition policy and certificate branding must be approved before institutional use.
+Unique event keys prevent the same event from awarding points repeatedly through a retried request. Activity & Certificates also shows a top-10 leaderboard based on verified reward-ledger totals and the signed-in student's rank; only display names and verified contributions are shown, not email addresses or claim evidence. Certificates are downloadable PDFs and state they are prototype recognition documents, not official CVR College credentials. A real college recognition policy and certificate branding must be approved before institutional use.
 
 ## 10. Coverage of the problem statement outcomes
 
