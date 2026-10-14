@@ -885,7 +885,7 @@ class ClaimBody(BaseModel):
     report_id: str
     evidence: str = Field(min_length=20, max_length=1800)
     lost_report_id: str | None = None
-    evidence_types: list[str] = Field(default_factory=list)
+    evidence_types: list[str] = Field(min_length=1, max_length=6)
 
 
 class ClaimEvidenceBody(BaseModel):
