@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102c2a">
+  <meta name="description" content="LostLink campus lost and found reporting and claim verification prototype.">
+  <title>LostLink · Campus Lost & Found</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <main id="loginView" class="login-shell">
+    <section class="login-story">
+      <div class="brand-lockup">
+        <span class="brand-mark">LL</span>
+        <span><strong>LostLink</strong><small>Campus lost & found</small></span>
+      </div>
+      <div class="story-copy">
+        <p class="eyebrow">A calmer way to find what matters</p>
+        <h1>Lost something?<br><span>Start here.</span></h1>
+        <p class="lede">Report an item, find relevant campus records and submit a claim through a clear, staff-reviewed process.</p>
+        <div class="story-points">
+          <div><span class="point-icon">01</span><span><strong>Report clearly</strong><small>Useful details, without oversharing.</small></span></div>
+          <div><span class="point-icon">02</span><span><strong>Find likely matches</strong><small>Relevant reports, with reasons.</small></span></div>
+          <div><span class="point-icon">03</span><span><strong>Verify before release</strong><small>Matching is not proof of ownership.</small></span></div>
+        </div>
+      </div>
+      <div class="story-footer">LostLink is a standalone hackathon prototype prepared for a future campus workflow.</div>
+    </section>
+
+    <section class="login-panel">
+      <div class="panel-kicker"><span class="status-dot"></span> CAMPUS ACCESS</div>
+      <h2>Welcome back</h2>
+      <p class="muted">Sign in to report, search or review a claim.</p>
+      <form id="loginForm" class="form-stack">
+        <label>Email address<input id="loginEmail" type="email" autocomplete="username" required placeholder="you@college.edu"></label>
+        <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Enter password"></label>
+        <button class="button button-primary button-full" type="submit">Sign in <span aria-hidden="true">↗</span></button>
+        <p id="loginError" class="form-error" role="alert"></p>
+      </form>
+      <div id="demoAccess" class="demo-access hidden">
+        <div class="divider-label"><span></span><small>LOCAL DEMO ACCOUNTS</small><span></span></div>
+        <button id="fillStudent" class="demo-account" type="button"><span class="avatar avatar-student">S</span><span><strong>Student view</strong><small>Report, search and submit claims</small></span><span class="arrow">→</span></button>
+        <button id="fillOffice" class="demo-account" type="button"><span class="avatar avatar-office">O</span><span><strong>Office view</strong><small>Intake, tag and verify claims</small></span><span class="arrow">→</span></button>
+        <p class="demo-credentials">Local demo only. Do not use demo credentials on a deployed or shared server.</p>
+      </div>
+      <div class="privacy-note"><span class="lock-icon">⌑</span><span><strong>Private by design</strong><small>Claim evidence and internal verification details are visible only to the claimant and authorised office staff.</small></span></div>
+    </section>
+  </main>
+
+  <main id="appView" class="app-shell hidden">
+    <header class="app-header">
+      <a class="brand-lockup compact" href="/" aria-label="LostLink home"><span class="brand-mark">LL</span><span><strong>LostLink</strong><small>Campus lost & found</small></span></a>
+      <div class="header-right">
+        <span id="roleChip" class="role-chip">Student</span>
+        <div class="user-menu"><span id="userInitial" class="avatar avatar-student">S</span><span id="userName" class="user-name">Demo Student</span></div>
+        <button id="logoutButton" class="button button-quiet button-small" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <section class="welcome-row">
+      <div>
+        <p class="eyebrow">CAMPUS PROPERTY, MADE EASIER</p>
+        <h1 id="welcomeTitle">Find what you are looking for.</h1>
+        <p id="welcomeSubtitle" class="muted">Search reports and explore possible matches.</p>
+      </div>
+      <div class="welcome-mark" aria-hidden="true"><span>LL</span><i>↗</i></div>
+    </section>
+
+    <nav id="studentNav" class="tab-nav" aria-label="LostLink sections">
+      <button class="tab-button active" type="button" data-view="browse"><span>⌕</span> Browse items</button>
+      <button class="tab-button" type="button" data-view="report"><span>＋</span> New report</button>
+      <button class="tab-button" type="button" data-view="my-reports"><span>▤</span> My reports</button>
+      <button class="tab-button" type="button" data-view="my-claims"><span>◷</span> My claims <span id="claimNavCount" class="nav-count hidden">0</span></button>
+      <button id="officeNavButton" class="tab-button office-tab hidden" type="button" data-view="office"><span>▦</span> Office console</button>
+    </nav>
+
+    <section id="notice" class="notice hidden" role="status"></section>
+
+    <section id="browseView" class="content-view">
+      <div class="section-heading">
+        <div><p class="eyebrow">SEARCH THE CAMPUS</p><h2>Items held by the office</h2><p class="muted">Only items received and registered by the office appear here.</p></div>
+        <span id="browseCount" class="count-pill">0 items</span>
+      </div>
+      <form id="searchForm" class="filter-panel">
+        <label class="search-field"><span>⌕</span><input id="filterQuery" type="search" placeholder="Try “blue backpack” or “earbuds”"></label>
+        <label>Category<select id="filterCategory"><option value="">All categories</option></select></label>
+        <label>Block / area<select id="filterBlock"><option value="">All locations</option></select></label>
+        <div class="date-filter"><label>From<input id="filterDateFrom" type="date"></label><label>To<input id="filterDateTo" type="date"></label></div>
+        <button class="button button-primary" type="submit">Search</button>
+        <button id="clearFilters" class="button button-quiet" type="button">Clear</button>
+      </form>
+      <div id="browseResults" class="item-grid"></div>
+      <div id="browseEmpty" class="empty-state hidden"><span class="empty-icon">⌕</span><h3>No items found</h3><p>Try a broader search or remove a filter. Sensitive items may have limited public details.</p></div>
+    </section>
+
+    <section id="reportView" class="content-view hidden">
+      <div class="section-heading"><div><p class="eyebrow">CREATE A RECORD</p><h2>Tell us what happened</h2><p class="muted">Share enough detail to help identify the item. Keep unique proof of ownership private.</p></div></div>
+      <div class="form-layout">
+        <form id="reportForm" class="form-card form-stack">
+          <div class="form-section-heading"><span class="step-number">01</span><div><strong>Report details</strong><small>Start with the item and what happened.</small></div></div>
+          <label>What are you reporting?<select id="reportType" name="report_type"><option value="lost">I lost an item</option><option value="found">I found an item</option></select><small class="field-hint">Found-item reports become searchable only after office staff confirm physical receipt.</small></label>
+          <div class="two-columns">
+            <label>Item title<input id="reportTitle" name="title" required minlength="4" maxlength="100" placeholder="e.g. Navy backpack"></label>
+            <label>Category<select id="reportCategory" name="category" required></select></label>
+          </div>
+          <label>Description<textarea id="reportDescription" name="description" rows="4" required minlength="10" maxlength="1200" placeholder="Colour, type, visible condition and other useful details"></textarea><small class="field-hint">Do not include passwords, PINs, identity numbers or the unique private detail you will use to prove ownership.</small></label>
+          <label>Approximate date and time<input id="reportDate" name="occurred_at" type="datetime-local"></label>
+          <div class="form-section-heading space-top"><span class="step-number">02</span><div><strong>Where was it lost or found?</strong><small>Choose the closest known place. “Not sure” is okay.</small></div></div>
+          <div class="two-columns">
+            <label>Block / building<select id="reportBlock" name="location_block"><option value="">Choose a block or area</option></select></label>
+            <label>Floor<select id="reportFloor" name="location_floor"><option value="">Not sure</option></select></label>
+          </div>
+          <div class="two-columns">
+            <label>Room (optional)<input id="reportRoom" name="location_room" maxlength="80" placeholder="e.g. A-102"></label>
+            <label>Nearby area<input id="reportArea" name="location_area" maxlength="120" placeholder="e.g. Library entrance"></label>
+          </div>
+          <div class="form-section-heading space-top"><span class="step-number">03</span><div><strong>Photograph (optional)</strong><small>A clear photo can help people recognise the item.</small></div></div>
+          <label class="upload-box" for="reportImage"><span class="upload-symbol">↑</span><span><strong id="imageLabel">Choose a photo</strong><small>JPG, PNG or WebP · up to 5 MB</small></span><input id="reportImage" name="image" type="file" accept="image/jpeg,image/png,image/webp"></label>
+          <p id="reportImageWarning" class="field-hint">Avoid photos that expose identity numbers, access codes or other sensitive information.</p>
+          <p id="reportError" class="form-error" role="alert"></p>
+          <div class="form-actions"><button class="button button-primary" type="submit">Submit report <span aria-hidden="true">↗</span></button><button id="cancelReport" class="button button-quiet" type="button">Cancel</button></div>
+        </form>
+        <aside class="side-guidance">
+          <div class="guidance-icon">✳</div><h3>Helpful details make better matches.</h3><p>Describe what is visible, when and where it was last seen, and any relevant non-sensitive characteristics.</p>
+          <div class="guidance-rule"><span>✓</span><span><strong>Be specific</strong><small>“Blue backpack with two front pockets” is more useful than “bag”.</small></span></div>
+          <div class="guidance-rule"><span>✓</span><span><strong>Keep proof private</strong><small>Save a distinctive mark or hidden detail for the verification process.</small></span></div>
+          <div class="guidance-rule"><span>✓</span><span><strong>Use honest estimates</strong><small>Choose an approximate area if you do not remember the exact room.</small></span></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="myReportsView" class="content-view hidden">
+      <div class="section-heading"><div><p class="eyebrow">YOUR ACTIVITY</p><h2>My reports</h2><p class="muted">Check submitted reports and find possible matches for your lost items.</p></div><button class="button button-primary" type="button" data-go="report">＋ New report</button></div>
+      <div id="myReportsList" class="stack-list"></div>
+      <div id="myReportsEmpty" class="empty-state hidden"><span class="empty-icon">▤</span><h3>No reports yet</h3><p>Your lost and found reports will appear here.</p></div>
+      <div id="matchesPanel" class="matches-panel hidden"><div class="section-heading"><div><p class="eyebrow">AI-ASSISTED COMPARISON</p><h2>Possible matches</h2><p class="muted">These are suggestions, not proof of ownership.</p></div><button id="closeMatches" class="button button-quiet button-small" type="button">Close</button></div><div id="matchResults" class="item-grid"></div></div>
+    </section>
+
+    <section id="myClaimsView" class="content-view hidden">
+      <div class="section-heading"><div><p class="eyebrow">CLAIM STATUS</p><h2>My claims</h2><p class="muted">Your private evidence is visible to you and authorised office reviewers only.</p></div></div>
+      <div id="myClaimsList" class="stack-list"></div>
+      <div id="myClaimsEmpty" class="empty-state hidden"><span class="empty-icon">◷</span><h3>No claims submitted</h3><p>When you submit a claim for an item, its review status will appear here.</p></div>
+    </section>
+
+    <section id="officeView" class="content-view hidden">
+      <div class="section-heading"><div><p class="eyebrow">AUTHORISED STAFF ONLY</p><h2>Campus office console</h2><p class="muted">Record physical intake and review ownership claims. Collection and handover are outside this prototype's scope.</p></div><span class="role-chip role-chip-office">Office staff</span></div>
+      <div id="officeStats" class="stats-grid"></div>
+      <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">PHYSICAL CUSTODY</p><h3>Found items awaiting intake</h3><p class="muted">Assign a physical tag only after confirming the item has been received.</p></div></div><div id="intakeQueue" class="stack-list"></div><div id="intakeEmpty" class="inline-empty hidden">No found-item reports are waiting for intake.</div></div>
+      <div class="office-section"><div class="section-heading compact-heading"><div><p class="eyebrow">OWNERSHIP REVIEW</p><h3>Claims requiring attention</h3><p class="muted">Private evidence, internal risk level and tag details are never shown in the student view.</p></div></div><div id="officeClaims" class="stack-list"></div><div id="officeClaimsEmpty" class="inline-empty hidden">No claims have been submitted yet.</div></div>
+    </section>
+
+    <footer class="app-footer"><span>LostLink · Campus property assistance</span><span>Potential matches are suggestions, not proof of ownership.</span></footer>
+  </main>
+
+  <dialog id="claimDialog" class="dialog-card">
+    <form id="claimForm" class="form-stack">
+      <div class="dialog-heading"><div><p class="eyebrow">OWNERSHIP CLAIM</p><h2>Help verify this item</h2></div><button id="closeClaim" type="button" class="icon-button" aria-label="Close">×</button></div>
+      <div id="claimItemSummary" class="claim-item-summary"></div>
+      <p class="muted small-copy">Explain details that can establish ownership. This response is private and will be reviewed by authorised office staff. Never share passwords, PINs or one-time codes.</p>
+      <label>Ownership evidence<textarea id="claimEvidence" rows="5" required minlength="20" maxlength="1800" placeholder="Describe distinctive features or other evidence that only the owner should know."></textarea></label>
+      <p id="claimError" class="form-error" role="alert"></p>
+      <div class="form-actions"><button class="button button-primary" type="submit">Submit private claim</button><button id="cancelClaim" class="button button-quiet" type="button">Cancel</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
