@@ -43,8 +43,11 @@
       </form>
       <div id="demoAccess" class="demo-access hidden">
         <div class="divider-label"><span></span><small>LOCAL DEMO ACCOUNTS</small><span></span></div>
-        <button id="fillStudent" class="demo-account" type="button"><span class="avatar avatar-student">S</span><span><strong>Student view</strong><small>Report, search and submit claims</small></span><span class="arrow">→</span></button>
-        <button id="fillOffice" class="demo-account" type="button"><span class="avatar avatar-office">O</span><span><strong>Office view</strong><small>Intake, tag and verify claims</small></span><span class="arrow">→</span></button>
+        <button id="fillStudent" class="demo-account" type="button"><span class="avatar avatar-student">S</span><span><strong>Student 1 · Demo Student</strong><small>Report, search and submit claims</small></span><span class="arrow">→</span></button>
+        <button class="demo-account" type="button" data-demo-email="student2@lostlink.local" data-demo-password="student2123"><span class="avatar avatar-student">A</span><span><strong>Student 2 · Aarav Mehta</strong><small>Separate test identity</small></span><span class="arrow">→</span></button>
+        <button class="demo-account" type="button" data-demo-email="student3@lostlink.local" data-demo-password="student3123"><span class="avatar avatar-student">R</span><span><strong>Student 3 · Riya Sharma</strong><small>Separate test identity</small></span><span class="arrow">→</span></button>
+        <button class="demo-account" type="button" data-demo-email="student4@lostlink.local" data-demo-password="student4123"><span class="avatar avatar-student">K</span><span><strong>Student 4 · Kabir Rao</strong><small>Separate test identity</small></span><span class="arrow">→</span></button>
+        <button id="fillOffice" class="demo-account" type="button"><span class="avatar avatar-office">O</span><span><strong>Campus office staff</strong><small>Intake, tag and verify claims</small></span><span class="arrow">→</span></button>
         <p class="demo-credentials">Local demo only. Do not use demo credentials on a deployed or shared server.</p>
       </div>
       <div class="privacy-note"><span class="lock-icon">⌑</span><span><strong>Private by design</strong><small>Claim evidence and internal verification details are visible only to the claimant and authorised office staff.</small></span></div>
@@ -101,11 +104,15 @@
     </section>
 
     <section id="reportView" class="content-view hidden">
-      <div class="section-heading"><div><p class="eyebrow">CREATE A RECORD</p><h2>Tell us what happened</h2><p class="muted">Share enough detail to help identify the item. Keep unique proof of ownership private.</p></div></div>
+      <div class="section-heading"><div><p class="eyebrow">CREATE A RECORD</p><h2 id="reportModeTitle">Choose your report type</h2><p id="reportModeDescription" class="muted">Lost and Found have separate guided paths so each report starts with the right context.</p></div></div>
+      <div id="reportTypeChooser" class="report-type-chooser">
+        <button class="report-type-card" type="button" data-report-kind="lost"><span class="report-type-icon">⌕</span><strong>I lost something</strong><small>Tell us what went missing, when you last saw it and where to search.</small><span class="report-type-action">Start lost report ↗</span></button>
+        <button class="report-type-card" type="button" data-report-kind="found"><span class="report-type-icon">✦</span><strong>I found something</strong><small>Record the item and where it was found. Office staff must receive it before it is searchable.</small><span class="report-type-action">Start found report ↗</span></button>
+      </div>
       <div class="form-layout">
-        <form id="reportForm" class="form-card form-stack">
-          <div class="form-section-heading"><span class="step-number">01</span><div><strong>Report details</strong><small>Start with the item and what happened.</small></div></div>
-          <label>What are you reporting?<select id="reportType" name="report_type"><option value="lost">I lost an item</option><option value="found">I found an item</option></select><small class="field-hint">Found-item reports become searchable only after office staff confirm physical receipt.</small></label>
+        <form id="reportForm" class="form-card form-stack hidden">
+          <input id="reportType" name="report_type" type="hidden" value="">
+          <div class="form-section-heading"><span class="step-number">01</span><div><strong id="reportFormStepTitle">Report details</strong><small id="reportFormStepHint">Add the item and context.</small></div></div>
           <div class="two-columns">
             <label>Item name <span class="field-required">Required</span><input id="reportTitle" name="title" required minlength="4" maxlength="100" placeholder="e.g. Navy backpack"></label>
             <label>Category <span class="field-required">Required</span><select id="reportCategory" name="category" required></select></label>
@@ -117,8 +124,8 @@
             <label>Main colour <span class="field-optional">Optional</span><input id="reportColor" name="primary_color" maxlength="60" placeholder="e.g. navy blue"></label>
           </div>
           <label>Visible characteristics <span class="field-optional">Optional</span><textarea id="reportFeatures" name="visible_features" rows="2" maxlength="400" placeholder="e.g. two front pockets, black zip, small scratch on the outside"></textarea><small class="field-hint">Only enter features that are safe to show to other students. Keep owner-only clues for the private claim process.</small></label>
-          <label>Approximate date and time <span class="field-optional">Optional</span><input id="reportDate" name="occurred_at" type="datetime-local"><small class="field-hint">Use your best estimate; leave blank if you are unsure rather than guessing.</small></label>
-          <div class="form-section-heading space-top"><span class="step-number">02</span><div><strong>Where was it lost or found?</strong><small>Choose the closest known place. “Not sure” is okay.</small></div></div>
+          <label><span id="reportDateLabel">Approximate date and time</span> <span class="field-optional">Optional</span><input id="reportDate" name="occurred_at" type="datetime-local"><small id="reportDateHelp" class="field-hint">Use your best estimate; leave blank if you are unsure rather than guessing.</small></label>
+          <div class="form-section-heading space-top"><span class="step-number">02</span><div><strong id="reportLocationHeading">Where did you last see it?</strong><small id="reportLocationHelp">Choose the closest known place. “Not sure” is okay.</small></div></div>
           <div class="two-columns">
             <label>Block / building or nearby area <span class="field-required">Required</span><select id="reportBlock" name="location_block"><option value="">Choose a block or area</option></select><small class="field-hint">A block/building or the nearby area below is required. Choose “Other / not sure” when needed.</small></label>
             <label>Floor <span class="field-optional">Optional</span><select id="reportFloor" name="location_floor"><option value="">Not sure</option></select></label>
@@ -131,7 +138,7 @@
           <label class="upload-box" for="reportImage"><span class="upload-symbol">↑</span><span><strong id="imageLabel">Choose a photo</strong><small>JPG, PNG or WebP · up to 5 MB</small></span><input id="reportImage" name="image" type="file" accept="image/jpeg,image/png,image/webp"></label>
           <p id="reportImageWarning" class="field-hint">Avoid photos that expose identity numbers, access codes or other sensitive information.</p>
           <p id="reportError" class="form-error" role="alert"></p>
-          <div class="form-actions"><button class="button button-primary" type="submit">Submit report <span aria-hidden="true">↗</span></button><button id="cancelReport" class="button button-quiet" type="button">Cancel</button></div>
+          <div class="form-actions"><button id="reportSubmitButton" class="button button-primary" type="submit"><span id="reportSubmitLabel">Submit lost report</span> <span aria-hidden="true">↗</span></button><button id="backToReportTypes" class="button button-quiet" type="button">Change report type</button><button id="cancelReport" class="button button-quiet" type="button">Cancel</button></div>
         </form>
         <aside class="side-guidance">
           <div class="guidance-icon">✳</div><h3>Helpful details make better matches.</h3><p>Describe what is visible, when and where it was last seen, and any relevant non-sensitive characteristics.</p>
@@ -237,13 +244,32 @@
     </form>
   </dialog>
 
-<dialog id="claimDialog" class="dialog-card">
+<dialog id="itemDetailsDialog" class="dialog-card">
+    <div class="form-stack">
+      <div class="dialog-heading"><div><p class="eyebrow">PUBLIC ITEM RECORD</p><h2 id="itemDetailsTitle">Item details</h2></div><button id="closeItemDetails" type="button" class="icon-button" aria-label="Close">×</button></div>
+      <div id="itemDetailsContent" class="item-details-content"></div>
+      <div class="form-actions"><button id="itemDetailsClaimButton" class="button button-primary" type="button">Submit claim</button><button id="cancelItemDetails" class="button button-quiet" type="button">Close details</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="claimDialog" class="dialog-card">
     <form id="claimForm" class="form-stack">
       <div class="dialog-heading"><div><p class="eyebrow">OWNERSHIP CLAIM</p><h2>Help verify this item</h2></div><button id="closeClaim" type="button" class="icon-button" aria-label="Close">×</button></div>
       <div id="claimItemSummary" class="claim-item-summary"></div>
       <label>Link to your lost report <span class="field-optional">Optional</span><select id="claimLostReport"><option value="">No linked lost report</option></select><small class="field-hint">If this claim is approved and the item is physically returned, the linked lost report will be closed automatically.</small></label>
       <p class="muted small-copy">Explain details that can establish ownership. This response is private and will be reviewed by authorised office staff. Never share passwords, PINs or one-time codes.</p>
-      <label>Ownership evidence <span class="field-required">Required</span><textarea id="claimEvidence" rows="5" required minlength="20" maxlength="1800" placeholder="Describe distinctive features or other evidence that only the owner should know."></textarea></label>
+      <fieldset class="evidence-type-fieldset">
+        <legend>Which kinds of proof can support your claim? <span class="field-required">Choose at least one</span></legend>
+        <label class="checkbox-line"><input type="checkbox" name="claimEvidenceType" value="distinctive_features"> Distinctive features or owner-only details</label>
+        <label class="checkbox-line"><input type="checkbox" name="claimEvidenceType" value="purchase_or_receipt"> Purchase / receipt proof available for staff to check</label>
+        <label class="checkbox-line"><input type="checkbox" name="claimEvidenceType" value="packaging_or_accessory"> Matching packaging, accessory or paired item</label>
+        <label class="checkbox-line"><input type="checkbox" name="claimEvidenceType" value="timeline_and_location"> Consistent date and place of loss</label>
+        <label class="checkbox-line"><input type="checkbox" name="claimEvidenceType" value="device_or_account_context"> Device/account context that staff can independently verify</label>
+        <label class="checkbox-line"><input type="checkbox" name="claimEvidenceType" value="other"> Other verifiable evidence</label>
+      </fieldset>
+      <label class="upload-box" for="claimEvidenceImage"><span class="upload-symbol">＋</span><span><strong id="claimEvidenceImageLabel">Attach one supporting photo (optional)</strong><small>JPG, PNG or WebP · up to 5 MB · do not upload IDs, passwords or access codes</small></span><input id="claimEvidenceImage" name="claim_evidence_image" type="file" accept="image/jpeg,image/png,image/webp"></label>
+      <p class="field-hint">A photo already used in a LostLink report or another claim will be rejected, including visually similar copies. Images are private to the claimant and office reviewers and are watermarked in the preview.</p>
+      <label>Private explanation <span class="field-required">Required</span><textarea id="claimEvidence" rows="5" required minlength="20" maxlength="1800" placeholder="Explain what proves this is yours and how the office can verify it. Never share passwords, PINs or one-time codes."></textarea></label>
       <p id="claimError" class="form-error" role="alert"></p>
       <div class="form-actions"><button id="claimSubmitButton" class="button button-primary" type="submit">Submit private claim</button><button id="cancelClaim" class="button button-quiet" type="button">Cancel</button></div>
     </form>
