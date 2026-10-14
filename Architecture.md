@@ -24,7 +24,7 @@ This describes the actual modular layout of the LostLink prototype. The refactor
 - app/services/rewards.py — idempotent contribution points and milestone certificate PDFs.
 - app/static/ — frontend HTML, JavaScript and CSS.
 - tests/ — matching, rewards and full workflow checks.
-- scripts/run-jury-demo.ps1 — local student/office demo launcher.
+- scripts/run-demo.ps1 — local student/office demo launcher.
 
 ## Request flow and dependency direction
 
