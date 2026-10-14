@@ -293,6 +293,48 @@ class LostLinkWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(repeated.status_code, 409)
 
+    def test_claim_cannot_link_another_students_lost_report(self):
+        self.login("finder@example.test", "finder-password")
+        lost_response = self.client.post(
+            "/api/reports",
+            json=self.report_body("lost", "White calculator", "White scientific calculator with a dark screen."),
+        )
+        self.assertEqual(lost_response.status_code, 200, lost_response.text)
+        someone_elses_lost_id = lost_response.json()["report"]["id"]
+        self.logout()
+
+        self.login("office@example.test", "office-password")
+        found_response = self.client.post(
+            "/api/reports",
+            json=self.report_body("found", "White calculator", "White scientific calculator found near the lecture hall."),
+        )
+        self.assertEqual(found_response.status_code, 200, found_response.text)
+        found_id = found_response.json()["report"]["id"]
+        intake = self.client.post(
+            f"/api/reports/{found_id}/intake",
+            json={
+                "confirmed_physical_receipt": True,
+                "storage_location": "Lost and Found Office - Cabinet D1",
+                "private_detail": "Small line on the rear casing.",
+                "value_band": "low",
+                "sensitivity_level": 1,
+            },
+        )
+        self.assertEqual(intake.status_code, 200, intake.text)
+        self.logout()
+
+        self.login("claimant@example.test", "claimant-password")
+        response = self.client.post(
+            "/api/claims",
+            json={
+                "report_id": found_id,
+                "lost_report_id": someone_elses_lost_id,
+                "evidence": "I can identify a fine line on the rear casing and verify the stored information in person.",
+            },
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("one of your own open lost reports", response.json()["detail"])
+
     def test_found_report_can_only_be_withdrawn_before_intake(self):
         self.login("claimant@example.test", "claimant-password")
         found_report = self.client.post(
