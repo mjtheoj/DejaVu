@@ -248,24 +248,31 @@ async function submitReport(event) {
     location_area: $("#reportArea").value.trim() || null
   };
   const image = $("#reportImage").files[0];
+  if (!body.location_block && !body.location_area) {
+    $("#reportError").textContent = "Choose a campus block/building or enter a nearby area.";
+    $("#reportArea").focus();
+    return;
+  }
   try {
     const result = await api("/api/reports", { method: "POST", body });
+    let successMessage = result.message;
+    let photoFailed = false;
     if (image) {
       const fileBody = new FormData();
       fileBody.append("file", image);
       try {
         await api("/api/reports/" + encodeURIComponent(result.report.id) + "/image", { method: "POST", body: fileBody });
       } catch (uploadError) {
-        showNotice("The report was submitted, but its photo was not saved: " + uploadError.message, true);
+        photoFailed = true;
+        successMessage += " The report was saved, but the photo upload failed: " + uploadError.message;
       }
     }
     $("#reportForm").reset();
     $("#imageLabel").textContent = "Choose a photo";
     const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
     $("#reportDate").value = now.toISOString().slice(0, 16);
-    if (!$("#notice").classList.contains("error")) showNotice(result.message, false);
     navigate("my-reports");
-    showToast(result.message, false);
+    showToast(successMessage, photoFailed);
   } catch (error) {
     $("#reportError").textContent = error.message;
   }
@@ -630,7 +637,7 @@ async function loadActivity() {
       ? '<div class="leaderboard-self"><span>Your current rank</span><strong>#' + escapeHTML(leaderboard.my_rank) + '</strong><small>' + escapeHTML(leaderboard.my_total_points) + ' verified points</small></div>'
       : '<div class="leaderboard-self"><span>Your current rank</span><strong>—</strong><small>Earn points when the office verifies a contribution.</small></div>';
     $("#leaderboardList").innerHTML = leaderboard.leaders.map((leader) =>
-      '<div class="leaderboard-row ' + (leader.display_name === currentUser.display_name ? "leaderboard-row-self" : "") + '"><span class="leaderboard-rank">#' +
+      '<div class="leaderboard-row ' + (leader.is_me ? "leaderboard-row-self" : "") + '"><span class="leaderboard-rank">#' +
       escapeHTML(leader.rank) + '</span><span class="leaderboard-name">' + escapeHTML(leader.display_name) + '</span><span class="leaderboard-detail">' +
       escapeHTML(leader.verified_reports) + ' reports</span><strong class="leaderboard-points">' + escapeHTML(leader.total_points) + ' pts</strong></div>'
     ).join("");
