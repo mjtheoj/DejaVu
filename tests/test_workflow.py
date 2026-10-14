@@ -511,6 +511,25 @@ class LostLinkWorkflowTests(unittest.TestCase):
         image.save(output, format="PNG")
         return output.getvalue()
 
+    def test_report_image_rejects_duplicate_already_used_on_another_report(self):
+        self.login("finder@example.test", "finder-password")
+        first = self.client.post("/api/reports", json=self.report_body(
+            "found", "Black headphones", "Black over-ear headphones with padded band and silver hinge."
+        ))
+        second = self.client.post("/api/reports", json=self.report_body(
+            "found", "Another pair of headphones", "A separate report for a pair of black headphones."
+        ))
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(second.status_code, 200, second.text)
+        image = self._image_bytes(4)
+        upload = self.client.post(f"/api/reports/{first.json()['report']['id']}/image",
+                                  files={"file": ("first.png", image, "image/png")})
+        self.assertEqual(upload.status_code, 200, upload.text)
+        duplicate = self.client.post(f"/api/reports/{second.json()['report']['id']}/image",
+                                     files={"file": ("copy.png", image, "image/png")})
+        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+        self.assertIn("duplicates or closely matches", duplicate.json()["detail"])
+
     def test_claim_evidence_rejects_image_already_used_on_a_report(self):
         self.login("finder@example.test", "finder-password")
         found = self.client.post(
@@ -619,6 +638,52 @@ class LostLinkWorkflowTests(unittest.TestCase):
         self.login("office@example.test", "office-password")
         staff_preview = self.client.get(f"/api/claims/{claim_id}/evidence-image")
         self.assertEqual(staff_preview.status_code, 200)
+
+    def test_login_attempts_are_throttled_by_email_and_ip(self):
+        for attempt in range(5):
+            response = self.client.post("/api/login", json={
+                "email": "claimant@example.test", "password": "definitely-wrong"
+            })
+            self.assertEqual(response.status_code, 401, response.text)
+        blocked = self.client.post("/api/login", json={
+            "email": "claimant@example.test", "password": "claimant-password"
+        })
+        self.assertEqual(blocked.status_code, 429, blocked.text)
+        self.assertTrue(int(blocked.headers.get("retry-after", "0")) > 0)
+
+    def test_student_open_claim_cap_is_enforced(self):
+        found_ids = []
+        self.login("finder@example.test", "finder-password")
+        for index in range(6):
+            created = self.client.post("/api/reports", json=self.report_body(
+                "found", f"Test backpack {index}", f"Black backpack number {index} with a unique test label."
+            ))
+            self.assertEqual(created.status_code, 200, created.text)
+            found_ids.append(created.json()["report"]["id"])
+        self.logout()
+        self.login("office@example.test", "office-password")
+        for report_id in found_ids:
+            intake = self.client.post(f"/api/reports/{report_id}/intake", json={
+                "confirmed_physical_receipt": True, "storage_location": "Office shelf D-04",
+                "private_detail": "Unique mark on inner seam.", "value_band": "low", "sensitivity_level": 1,
+            })
+            self.assertEqual(intake.status_code, 200, intake.text)
+        self.logout()
+        self.login("claimant@example.test", "claimant-password")
+        for report_id in found_ids[:5]:
+            claim = self.client.post("/api/claims", json={
+                "report_id": report_id,
+                "evidence": "I can describe the owner-only inner seam mark and the date of purchase.",
+                "evidence_types": ["distinctive_features"]
+            })
+            self.assertEqual(claim.status_code, 200, claim.text)
+        capped = self.client.post("/api/claims", json={
+            "report_id": found_ids[5],
+            "evidence": "I can describe the owner-only inner seam mark and the date of purchase.",
+            "evidence_types": ["distinctive_features"]
+        })
+        self.assertEqual(capped.status_code, 409, capped.text)
+        self.assertIn("limit of 5 open claims", capped.json()["detail"])
 
     def test_claim_decision_rejects_student_and_accepts_office_checklist(self):
         # Exercise the same endpoint called by the office's Verify claim button.

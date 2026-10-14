@@ -14,6 +14,12 @@ from app.api.routes.reports import router as reports_router
 from app.api.routes.claims import router as claims_router
 from app.api.routes.engagement import router as engagement_router
 
+if not SESSION_SECRET or SESSION_SECRET in {
+    "replace-with-a-long-random-secret-before-running",
+    "local-development-only-change-this",
+}:
+    raise RuntimeError("SESSION_SECRET is unset or a placeholder. Set a unique random secret in .env before starting LostLink.")
+
 app = FastAPI(title="LostLink", version="0.1.0")
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="strict", https_only=HTTPS_ONLY, max_age=60 * 60 * 8)
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")

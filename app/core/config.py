@@ -11,7 +11,8 @@ DATA_DIR = Path(os.getenv("DATA_DIR", str(ROOT / "data"))).resolve()
 DB_PATH = Path(os.getenv("DATABASE_PATH", str(DATA_DIR / "lostlink.db"))).resolve()
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(DATA_DIR / "uploads"))).resolve()
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
-SESSION_SECRET = os.getenv("SESSION_SECRET", "local-development-only-change-this")
+SESSION_SECRET = os.getenv("SESSION_SECRET", "").strip()
+MAX_OPEN_CLAIMS_PER_STUDENT = 5
 HTTPS_ONLY = os.getenv("SESSION_HTTPS_ONLY", "false").lower() == "true"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 ALLOWED_EVIDENCE_TYPES = {

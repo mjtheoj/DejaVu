@@ -1,7 +1,8 @@
 """HTTP route group."""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from app.core.runtime import *
 from app.schemas import *
+from app.services.auth import clear_login_failures, login_lockout_remaining, record_failed_login
 
 router = APIRouter()
 
@@ -27,13 +28,34 @@ def public_config():
 
 @router.post("/api/login")
 def login(body: LoginBody, request: Request):
+    email = body.email.strip().lower()
+    ip_address = request.client.host if request.client else "unknown"
+    subjects = ["email:" + email, "ip:" + ip_address]
+    locked_for = 0
+    invalid_credentials = False
+    user = None
     with connect_db() as conn:
-        row = conn.execute("SELECT * FROM users WHERE email=?", (body.email.strip().lower(),)).fetchone()
-    if not row or not verify_password(body.password, row["password_hash"]):
+        conn.execute("BEGIN IMMEDIATE")
+        locked_for = login_lockout_remaining(conn, subjects)
+        if not locked_for:
+            row = conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+            if not row or not verify_password(body.password, row["password_hash"]):
+                record_failed_login(conn, subjects)
+                invalid_credentials = True
+            else:
+                clear_login_failures(conn, subjects)
+                user = user_payload(row)
+    if locked_for:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many sign-in attempts. Try again after the lockout period.",
+            headers={"Retry-After": str(locked_for)},
+        )
+    if invalid_credentials or user is None:
         raise HTTPException(status_code=401, detail="Email or password is incorrect.")
     request.session.clear()
-    request.session["user_id"] = row["id"]
-    return {"user": user_payload(row)}
+    request.session["user_id"] = user["id"]
+    return {"user": user}
 
 
 @router.post("/api/logout")

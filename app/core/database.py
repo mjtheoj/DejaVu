@@ -50,6 +50,12 @@ def initialise_db() -> None:
                 password_hash TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                subject TEXT PRIMARY KEY,
+                failure_count INTEGER NOT NULL DEFAULT 0,
+                window_started_at TEXT NOT NULL,
+                locked_until TEXT
+            );
             CREATE TABLE IF NOT EXISTS reports (
                 id TEXT PRIMARY KEY,
                 public_ref TEXT NOT NULL UNIQUE,

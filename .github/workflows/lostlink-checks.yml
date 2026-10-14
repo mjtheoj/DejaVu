@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SESSION_SECRET: ci-only-not-for-deployment-8f36b2f7e0bc4a4fa5a7a6cfb121ab17
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

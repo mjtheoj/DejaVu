@@ -200,10 +200,22 @@ async def upload_report_image(
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Images must be 5 MB or smaller.")
     normalized, image_sha256, image_phash = canonicalise_image(raw)
-    filename = uuid.uuid4().hex + ".jpg"
-    (UPLOAD_DIR / filename).write_bytes(normalized)
     with connect_db() as conn:
+        # Serialise fingerprint check and insert/update against concurrent uploads.
+        conn.execute("BEGIN IMMEDIATE")
         row = read_report(conn, report_id)
+        is_office = user["role"] == "office"
+        if not is_office and row["created_by"] != user["id"]:
+            raise HTTPException(status_code=403, detail="You cannot update this report.")
+        if not is_office and row["report_type"] == "found" and row["status"] != "awaiting_intake":
+            raise HTTPException(status_code=409, detail="A found item's photo can only be changed before office intake.")
+        if image_fingerprint_matches(conn, image_sha256, image_phash):
+            raise HTTPException(
+                status_code=409,
+                detail="This image duplicates or closely matches an image already in LostLink. Upload a different, genuine item photo.",
+            )
+        filename = uuid.uuid4().hex + ".jpg"
+        (UPLOAD_DIR / filename).write_bytes(normalized)
         old = row["image_path"]
         conn.execute(
             "UPDATE reports SET image_path=?, image_sha256=?, image_phash=?, updated_at=? WHERE id=?",

@@ -15,6 +15,7 @@ async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authentic
         raise HTTPException(status_code=422, detail="Do not select the same evidence type twice.")
     evidence_types = list(body.evidence_types)
     with connect_db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         report = read_report(conn, body.report_id)
         if report["report_type"] != "found" or report["status"] != "available":
             raise HTTPException(status_code=409, detail="This item is not accepting claims.")
@@ -51,6 +52,16 @@ async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authentic
                     detail="Your previous claim was not approved. Use the one-time review request on My Claims instead of submitting another claim."
                 )
             raise HTTPException(status_code=409, detail="You already have an active claim for this item.")
+        open_claim_count = conn.execute(
+            """SELECT COUNT(*) FROM claims WHERE claimant_id=?
+               AND status IN ('pending','disputed','needs_more_evidence','approved_for_collection')""",
+            (user["id"],),
+        ).fetchone()[0]
+        if open_claim_count >= MAX_OPEN_CLAIMS_PER_STUDENT:
+            raise HTTPException(
+                status_code=409,
+                detail=f"You have reached the limit of {MAX_OPEN_CLAIMS_PER_STUDENT} open claims. Wait for a review or use the existing claim's follow-up controls.",
+            )
         active = conn.execute(
             "SELECT id FROM claims WHERE report_id=? AND status IN ('pending','disputed','needs_more_evidence')",
             (body.report_id,)

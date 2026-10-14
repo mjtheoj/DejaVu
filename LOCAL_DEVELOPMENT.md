@@ -57,10 +57,11 @@ cp .env.example .env
 
 Open `.env`. For a local evaluation, `.env.example` enables `DEMO_MODE=true` and uses non-production settings. Keep the server bound to localhost.
 
-- Change `SESSION_SECRET` to a long random value even for shared internal testing.
+- **Required:** replace the `SESSION_SECRET` placeholder with a unique random value. The app now fails fast if it is empty or still set to the example placeholder. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 - Keep `SESSION_HTTPS_ONLY=false` only for local HTTP development. Use HTTPS and secure cookies for an approved deployment.
 - `DATABASE_PATH` and `UPLOAD_DIR` point to local `data/` paths by default.
-- `USE_SEMANTIC_MODEL` and `USE_CLIP_MODEL` are both false by default. The built-in deterministic baseline works without downloading model weights.
+- `USE_SEMANTIC_MODEL` and `USE_CLIP_MODEL` are both false by default.
+- Login attempts are throttled by both email and client IP after 5 failed attempts within 15 minutes. A student can have at most 5 open claims at one time. The built-in deterministic baseline works without downloading model weights.
 
 Do not expose a demo-mode server to the public internet.
 
