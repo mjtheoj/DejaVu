@@ -166,7 +166,7 @@ async function mockApi(url,options){
   if(action==="matches"&&method==="GET"){
    const candidates=mockStore.reports.filter(r=>r.report_type==="found"&&r.status==="available").map(r=>{
     const terms=(report.title+" "+report.description).toLowerCase().split(/\W+/).filter(x=>x.length>2),hay=(r.title+" "+r.description+" "+(r.primary_color||"")+" "+(r.visible_features||"")).toLowerCase(),overlap=terms.filter(term=>hay.includes(term)).length,score=Math.min(.94,.48+overlap*.055);
-    return {...mockReportView(r,false),score,match_strength:score>=.72?"strong":score>=.45?"possible":"limited",match_reasons:["Descriptions contain overlapping item terms.","Category and reported location can help narrow review."],match_reasons_text:"Descriptions contain overlapping item terms."};
+    return {report:mockReportView(r,false),score,strength:score>=.72?"strong":score>=.45?"possible":"limited",reasons:["Descriptions contain overlapping item terms.","Category and reported location can help narrow review."]};
    }).sort((a,b)=>b.score-a.score).slice(0,5);return {matches:candidates};
   }
   if(action==="intake"&&method==="POST"){
@@ -691,7 +691,7 @@ async function loadMyClaims() {
       const evidencePhoto = claim.evidence_image_available
         ? '<figure class="evidence-image-preview"><img src="/api/claims/' + escapeHTML(claim.id) + '/evidence-image" alt="Your private evidence preview" draggable="false"><figcaption>Private, watermarked preview</figcaption></figure>'
         : "";
-      return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '" data-verification-level="' + levelNumber + '" data-minimum-checks="' + minimumChecks + '"><div class="list-card-head"><div><h3>' + escapeHTML(claim.report.title) + '</h3><p>' +
+      return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '"><div class="list-card-head"><div><h3>' + escapeHTML(claim.report.title) + '</h3><p>' +
         escapeHTML(claim.report.public_ref + " · Submitted " + humanDate(claim.created_at)) + "</p></div><span class=\"" + statusClass(claim.status) + "\">" +
         escapeHTML(statusLabel(claim.status)) + "</span></div><p>" + escapeHTML(guidance) + '</p>' + appealNote + linkedLost + '<div class="list-card-meta"><span>⌖ ' +
         escapeHTML(claim.report.location) + "</span><span>Reference " + escapeHTML(claim.report.public_ref) + "</span></div>" +
@@ -1010,7 +1010,7 @@ function officeClaimCard(claim) {
   const evidencePhoto = claim.evidence_image_available
     ? '<figure class="evidence-image-preview"><img src="' + evidenceImageSource + '" alt="Private claim evidence preview" draggable="false"><figcaption>Private preview · claimant and office only</figcaption></figure>'
     : "";
-  return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '"><div class="list-card-head"><div><h3>' +
+  return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '" data-verification-level="' + levelNumber + '" data-minimum-checks="' + minimumChecks + '"><div class="list-card-head"><div><h3>' +
     escapeHTML(report.title) + " · " + escapeHTML(report.public_ref) +
     '</h3><p>Claimant: ' + escapeHTML(claim.claimant_name) + " · " + escapeHTML(claim.claimant_email) + "</p></div><span class=\"" + statusClass(claim.status) +
     "\">" + escapeHTML(statusLabel(claim.status)) + "</span></div>" +
