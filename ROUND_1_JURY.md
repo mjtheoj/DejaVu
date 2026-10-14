@@ -36,7 +36,7 @@ The prototype covers student lost/found reports, optional photos, search/filteri
 
 ## 3. Solution at a glance
 
-~~~mermaid
+```mermaid
 flowchart LR
     A["Student reports lost item"] --> D["LostLink report store"]
     B["Student reports found item"] --> C["Campus office receives physical item"]
@@ -55,8 +55,7 @@ flowchart LR
     M --> N["Confirm identity and actual handover"]
     N --> O["Mark returned and audit the outcome"]
     O --> P["Notify users and update contribution points"]
-~~~
-
+```
 **Important design rule:** A match is a lead, not proof of ownership. Claim approval permits the collection process to proceed; it does not prove the physical item has already changed hands.
 
 ## 4. End-to-end workflow
@@ -95,7 +94,7 @@ After approval, the claim enters **Ready for physical handover**. Office staff r
 
 A wrong tag, an unapproved claim, or a duplicate handover is rejected. A valid handover is recorded with item, tag, claimant, office operator and timestamp. The claim/report is marked **Returned**, relevant users are notified, and eligible verified-contribution points can be awarded.
 
-~~~mermaid
+```mermaid
 flowchart TD
     A["Found-item report submitted"] --> B["Office intake queue"]
     B --> C{"Physical item received?"}
@@ -120,8 +119,7 @@ flowchart TD
     R -->|No| S["Do not close handover"]
     R -->|Yes| T["Record handover and mark Returned"]
     T --> U["Notify users, audit outcome and update eligible points"]
-~~~
-
+```
 ## 5. How the Tag ID and storage register help
 
 The Tag ID is the private identifier connecting a digital record to a physical object. It should be placed on a physical label after the item has been accepted by the campus custodian.
@@ -140,7 +138,7 @@ A Tag ID alone does not prove ownership. The return still requires claim verific
 
 ## 6. AI-assisted matching: what it does and does not do
 
-~~~mermaid
+```mermaid
 flowchart TD
     A["Open lost report"] --> C["Normalize report details"]
     B["Office-held found-item record"] --> C
@@ -151,8 +149,7 @@ flowchart TD
     G --> H["Explain available similarities"]
     H --> I["Student reviews candidate and may submit a claim"]
     I --> J["Office ownership verification remains mandatory"]
-~~~
-
+```
 The optional model stage is active only if its dependencies are installed and the configuration flag is enabled. The default path is a deterministic baseline using available text and contextual signals. This gives the prototype a reproducible starting point before heavier models are evaluated.
 
 **Why keep a human in the loop?** Objects can look alike, descriptions can be incomplete, and people can make mistaken reports. Matching narrows the search; only authorised verification and physical handover close the recovery.
@@ -161,7 +158,7 @@ The optional model stage is active only if its dependencies are installed and th
 
 ## 7. Technical architecture
 
-~~~mermaid
+```mermaid
 flowchart TB
     subgraph CLIENT["Client layer"]
       S["Student interface"]
@@ -194,8 +191,7 @@ flowchart TB
     CLAIM --> REWARD
     REWARD --> DB
     MATCH --> DB
-~~~
-
+```
 ### Technology stack
 
 | Layer | Technology | Role in the prototype |
@@ -225,7 +221,7 @@ The current persistence layer uses local SQLite and a local filesystem. Producti
 
 LostLink rewards verified contributions rather than unverified form submissions.
 
-~~~mermaid
+```mermaid
 flowchart TD
     A["Student submits found report"] --> B["Office confirms physical intake and assigns Tag ID"]
     B --> C["+10 verified intake points"]
@@ -236,8 +232,7 @@ flowchart TD
     D -->|Not yet| H["Show points and progress"]
     I["Approved claim + correct Tag ID + identity + actual handover"] --> J["+5 verified return points to contributing finder"]
     J --> D
-~~~
-
+```
 | Verified event | Prototype reward |
 |---|---:|
 | Found item physically received and tagged by office staff | +10 points |
