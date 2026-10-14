@@ -1529,6 +1529,7 @@ async def contribution_leaderboard(user: dict[str, Any] = Depends(authenticated_
             "display_name": row["display_name"],
             "total_points": points,
             "verified_reports": int(row["verified_reports"]),
+            "is_me": int(row["id"]) == int(user["id"]),
         }
         if int(row["id"]) == int(user["id"]):
             my_rank = current_rank
