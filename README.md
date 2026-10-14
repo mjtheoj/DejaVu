@@ -24,6 +24,15 @@ Rewards are attached to staff-confirmed events rather than raw form submissions:
 
 Student-facing search does not expose private Tag IDs, storage locations, private ownership evidence, internal verification details, value/risk fields or raw matching scores. These details stay in the office workflow. Role checks protect office actions; item intake, storage changes, claim decisions, handovers and reward awards are audited. Uploaded images are validated and re-encoded to remove embedded metadata.
 
+## Recent interface and claim improvements
+
+- **Separate Lost and Found entry paths:** students choose the type before the form opens. Copy, date prompts and location instructions change according to the selected flow.
+- **Richer item detail views:** search cards include a **View details** action. Item details include the public reference, category, status, location, approximate date, brand, colour and visible characteristics. Suggested-match details additionally show match strength and the reasons the item was suggested.
+- **Match notifications:** notifications for possible matches can open the match list for the associated lost report, so users do not have to search from scratch.
+- **Structured claim proof:** claimants select one or more evidence categories (distinctive features, purchase/receipt, packaging/accessory, date/location context, device/account context or other verifiable evidence), enter a private explanation and may attach one private supporting image.
+- **Image reuse checks:** the backend compares exact image hashes and perceptual fingerprints against images already stored on reports or claims. Exact duplicates and visually near-identical images are rejected. The check is a deterrent, not a guarantee against transformed images or screenshots.
+- **Parallel jury demo:** [`scripts/run-jury-demo.ps1`](scripts/run-jury-demo.ps1) starts student and office sessions on different local ports/hostnames. Both processes share the same local SQLite database while browser session cookies remain separate.
+
 ## Campus Sync integration direction
 
 LostLink is being designed as a feature within the Campus Sync student experience, with Campus Sync serving as the entry point for students and the campus office workflow supporting custody and handovers. The repository currently contains a standalone prototype; **it is not yet connected to Campus Sync or the college identity system**.
