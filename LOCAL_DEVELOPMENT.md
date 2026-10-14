@@ -13,54 +13,54 @@ This guide contains the setup, run, demo and test commands. Use a local developm
 
 If you have not cloned it:
 
-\`\`\`bash
+```bash
 git clone https://github.com/tanmayjain9059/DejaVu.git
 cd DejaVu
-\`\`\`
+```
 
-If the repository is already on your machine, open a terminal in the repository directory and pull the latest \`main\` branch before testing.
+If the repository is already on your machine, open a terminal in the repository directory and pull the latest `main` branch before testing.
 
 ## 2. Create a virtual environment
 
 ### Windows PowerShell
 
-\`\`\`powershell
+```powershell
 py -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\\.venv\\Scripts\\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 Copy-Item .env.example .env
-\`\`\`
+```
 
 If PowerShell activation is restricted by your device policy, use Command Prompt instead:
 
-\`\`\`bat
+```bat
 py -m venv .venv
-.\\.venv\\Scripts\\activate.bat
+.\.venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 copy .env.example .env
-\`\`\`
+```
 
 ### macOS / Linux
 
-\`\`\`bash
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 cp .env.example .env
-\`\`\`
+```
 
 ## 3. Configure the local environment
 
-Open \`.env\`. For a local evaluation, \`.env.example\` enables \`DEMO_MODE=true\` and uses non-production settings. Keep the server bound to localhost.
+Open `.env`. For a local evaluation, `.env.example` enables `DEMO_MODE=true` and uses non-production settings. Keep the server bound to localhost.
 
-- Change \`SESSION_SECRET\` to a long random value even for shared internal testing.
-- Keep \`SESSION_HTTPS_ONLY=false\` only for local HTTP development. Use HTTPS and secure cookies for an approved deployment.
-- \`DATABASE_PATH\` and \`UPLOAD_DIR\` point to local \`data/\` paths by default.
-- \`USE_SEMANTIC_MODEL\` and \`USE_CLIP_MODEL\` are both false by default. The built-in deterministic baseline works without downloading model weights.
+- Change `SESSION_SECRET` to a long random value even for shared internal testing.
+- Keep `SESSION_HTTPS_ONLY=false` only for local HTTP development. Use HTTPS and secure cookies for an approved deployment.
+- `DATABASE_PATH` and `UPLOAD_DIR` point to local `data/` paths by default.
+- `USE_SEMANTIC_MODEL` and `USE_CLIP_MODEL` are both false by default. The built-in deterministic baseline works without downloading model weights.
 
 Do not expose a demo-mode server to the public internet.
 
@@ -68,20 +68,20 @@ Do not expose a demo-mode server to the public internet.
 
 With the virtual environment activated:
 
-\`\`\`bash
+```bash
 python -m uvicorn app.main:app --reload
-\`\`\`
+```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep the terminal open while using the application. Stop the server with \`Ctrl+C\`.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep the terminal open while using the application. Stop the server with `Ctrl+C`.
 
 ## 5. Local demo accounts
 
-These accounts are created only when \`DEMO_MODE=true\`:
+These accounts are created only when `DEMO_MODE=true`:
 
 | Role | Email | Password |
 |---|---|---|
-| Student | \`student@lostlink.local\` | \`student123\` |
-| Office staff | \`office@lostlink.local\` | \`office123\` |
+| Student | `student@lostlink.local` | `student123` |
+| Office staff | `office@lostlink.local` | `office123` |
 
 These credentials are for local demos only. Do not reuse them in any shared or production environment.
 
@@ -89,7 +89,7 @@ These credentials are for local demos only. Do not reuse them in any shared or p
 
 1. Sign in as the demo student and open the seeded lost-backpack report under **My reports**. Select **Find possible matches** to show candidates and their explanation signals.
 2. As a student, submit a found-item report. Sign in as office staff and open **Found items awaiting intake**.
-3. Confirm that the physical item is in office custody, enter the real location used in the demo (room, cabinet and/or shelf), complete the private verification details and sensitivity fields, then confirm intake. The app assigns a tag such as \`LL-CVR-YYYY-000001\`; the item becomes searchable only after this step.
+3. Confirm that the physical item is in office custody, enter the real location used in the demo (room, cabinet and/or shelf), complete the private verification details and sensitivity fields, then confirm intake. The app assigns a tag such as `LL-CVR-YYYY-000001`; the item becomes searchable only after this step.
 4. In **Items currently in custody**, show the private Tag ID and storage location. Use **Update storage location** to demonstrate how an internal campus move is tracked in the audit trail.
 5. As a student, submit a claim with private ownership evidence. As office staff, review the risk-based checklist and verify the claim. It moves to **Ready for physical handover** but is not yet marked returned.
 6. In the handover queue, retrieve the item from the recorded location, read the physical tag, enter the exact Tag ID and confirm identity check plus actual handover. A wrong tag must fail; a correct tag closes the claim.
@@ -101,14 +101,14 @@ The physical item and its location in a demo are illustrative. A screen action c
 
 The default matcher is a deterministic baseline. To enable optional pretrained features, activate the virtual environment and run:
 
-\`\`\`bash
+```bash
 pip install -r requirements-ml.txt
-\`\`\`
+```
 
-Then set the required flags in \`.env\` and restart the server:
+Then set the required flags in `.env` and restart the server:
 
-- \`USE_SEMANTIC_MODEL=true\` enables Sentence Transformers text embeddings.
-- \`USE_CLIP_MODEL=true\` enables optional CLIP-based image/text similarity.
+- `USE_SEMANTIC_MODEL=true` enables Sentence Transformers text embeddings.
+- `USE_CLIP_MODEL=true` enables optional CLIP-based image/text similarity.
 
 The first model load can download weights and increase startup time, disk usage and memory consumption. If a model is unavailable or fails to load, the matcher may fall back to the baseline. Verify the model actually loaded before describing a demo as semantic/image-model based. Similarity is not a probability of ownership.
 
@@ -116,29 +116,29 @@ The first model load can download weights and increase startup time, disk usage 
 
 Install the development dependencies:
 
-\`\`\`bash
+```bash
 pip install -r requirements-dev.txt
 python -m compileall -q app tests
 python -m unittest discover -s tests -v
-\`\`\`
+```
 
 If Node.js is installed, also check the frontend script:
 
-\`\`\`bash
+```bash
 node --check app/static/app.js
-\`\`\`
+```
 
-GitHub Actions runs these checks on pushes and pull requests to \`main\`.
+GitHub Actions runs these checks on pushes and pull requests to `main`.
 
 ## 9. Reset local demo data
 
-Stop the server first. Local SQLite and uploaded images live under \`data/\` by default and are ignored by Git. To reset the demo, back up anything you need and remove the local \`data/\` directory before starting again. When \`DEMO_MODE=true\`, the app recreates the sample records. Do not delete data directories for any real/shared deployment.
+Stop the server first. Local SQLite and uploaded images live under `data/` by default and are ignored by Git. To reset the demo, back up anything you need and remove the local `data/` directory before starting again. When `DEMO_MODE=true`, the app recreates the sample records. Do not delete data directories for any real/shared deployment.
 
 ## Troubleshooting
 
-- **\`py\` is not recognised:** Install Python and enable its PATH/launcher option, then reopen the terminal.
-- **PowerShell cannot activate the environment:** Use the temporary process-level execution-policy command above or use Command Prompt's \`activate.bat\`.
-- **Port 8000 is busy:** Stop the other process or start on another port, for example \`python -m uvicorn app.main:app --reload --port 8001\`, then open the matching local URL.
+- **`py` is not recognised:** Install Python and enable its PATH/launcher option, then reopen the terminal.
+- **PowerShell cannot activate the environment:** Use the temporary process-level execution-policy command above or use Command Prompt's `activate.bat`.
+- **Port 8000 is busy:** Stop the other process or start on another port, for example `python -m uvicorn app.main:app --reload --port 8001`, then open the matching local URL.
 - **Photo upload fails:** Use a valid JPG, PNG or WebP file smaller than 5 MB.
 - **The app says the claim has not been verified:** Office review, required verification checks, exact Tag ID entry, identity confirmation and physical handover are separate steps by design.
 
