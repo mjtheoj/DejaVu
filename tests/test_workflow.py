@@ -52,7 +52,7 @@ class LostLinkWorkflowTests(unittest.TestCase):
 
     def tearDown(self):
         self.client.close()
-        for (module_name, value in self.old_module_settings.items():
+        for (module_name, value) in self.old_module_settings.items():
             module, name = module_name
             setattr(module, name, value)
         self.temp.cleanup()
