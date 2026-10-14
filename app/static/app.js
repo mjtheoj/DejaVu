@@ -527,13 +527,19 @@ function officeInventoryCard(report) {
 
 function officeHandoverCard(claim) {
   const report = claim.report;
+  const linkedLostMeta = claim.linked_lost_report
+    ? '<div class="linked-report-line office-linked-report"><strong>Linked lost report</strong><span>' +
+      escapeHTML(claim.linked_lost_report.title + " · " + claim.linked_lost_report.public_ref) +
+      '</span><span class="' + statusClass(claim.linked_lost_report.status) + '">' +
+      escapeHTML(statusLabel(claim.linked_lost_report.status)) + '</span></div>'
+    : "";
   return '<article class="list-card"><div class="list-card-head"><div><h3>' +
     escapeHTML(report.title + " · " + report.public_ref) + '</h3><p>Claimant: ' +
     escapeHTML(claim.claimant_name) + " · " + escapeHTML(claim.claimant_email) +
     "</p></div><span class=\"" + statusClass(claim.status) + "\">Verified claim</span></div>" +
     '<div class="internal-meta"><span>Physical tag: ' + escapeHTML(report.tag_id || "Not assigned") +
     "</span><span>Verification level: " + escapeHTML(report.verification_level ? "L" + report.verification_level : "Not assigned") +
-    "</span><span>Stored at: " + escapeHTML(report.storage_location || "Location needs confirmation") + "</span></div><p>Before release, compare the physical item with the tag and verify the claimant under campus policy.</p>" +
+    "</span><span>Stored at: " + escapeHTML(report.storage_location || "Location needs confirmation") + "</span></div>" + linkedLostMeta + "<p>Before release, compare the physical item with the tag and verify the claimant under campus policy.</p>" +
     '<div class="card-actions"><button class="button button-primary button-small" type="button" data-handover="' +
     escapeHTML(claim.id) + '" data-tag="' + escapeHTML(report.tag_id || "") + '">Confirm physical handover</button></div></article>';
 }
@@ -579,12 +585,19 @@ function officeClaimCard(claim) {
     '<button class="button button-amber button-small" type="button" data-decision="request_more_evidence" data-claim-id="' + escapeHTML(claim.id) + '">Request evidence</button>' +
     '<button class="button button-danger button-small" type="button" data-decision="mark_disputed" data-claim-id="' + escapeHTML(claim.id) + '">Mark disputed</button>' +
     '<button class="button button-quiet button-small" type="button" data-decision="reject" data-claim-id="' + escapeHTML(claim.id) + '">Reject claim</button></div>';
+  const linkedLost = claim.linked_lost_report
+    ? '<div class="linked-report-line office-linked-report"><strong>Linked lost report</strong><span>' +
+      escapeHTML(claim.linked_lost_report.title + " · " + claim.linked_lost_report.public_ref) +
+      '</span><span class="' + statusClass(claim.linked_lost_report.status) + '">' +
+      escapeHTML(statusLabel(claim.linked_lost_report.status)) + '</span></div>'
+    : "";
   return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '"><div class="list-card-head"><div><h3>' +
     escapeHTML(report.title) + " · " + escapeHTML(report.public_ref) +
     '</h3><p>Claimant: ' + escapeHTML(claim.claimant_name) + " · " + escapeHTML(claim.claimant_email) + "</p></div><span class=\"" + statusClass(claim.status) +
     "\">" + escapeHTML(statusLabel(claim.status)) + "</span></div>" +
     '<div class="internal-meta"><span>Physical tag: ' + escapeHTML(report.tag_id || "Not assigned") + "</span><span>Verification: " + escapeHTML(level) +
     "</span><span>Value band: " + escapeHTML(report.value_band || "unknown") + "</span><span>Sensitivity: " + escapeHTML(report.sensitivity_level) + "</span></div>" +
+    linkedLost +
     '<div class="claim-evidence"><strong>CLAIMANT EVIDENCE · PRIVATE</strong><p>' + escapeHTML(claim.evidence) + "</p></div>" +
     (claim.appeal_note ? '<div class="claim-appeal-note"><strong>CLAIMANT REVIEW REQUEST</strong><p>' + escapeHTML(claim.appeal_note) + '</p></div>' : "") +
     '<div class="internal-detail"><strong>INTERNAL VERIFICATION DETAIL</strong><small>' + escapeHTML(privateDetail) + "</small></div>" +
