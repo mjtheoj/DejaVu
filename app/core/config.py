@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]  # app/core/config.py -> repository root
 DATA_DIR = Path(os.getenv("DATA_DIR", str(ROOT / "data"))).resolve()
 DB_PATH = Path(os.getenv("DATABASE_PATH", str(DATA_DIR / "lostlink.db"))).resolve()
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(DATA_DIR / "uploads"))).resolve()
