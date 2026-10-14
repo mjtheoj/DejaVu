@@ -4,6 +4,8 @@ const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selec
 let currentUser = null;
 let appConfig = null;
 let selectedClaimReport = null;
+let selectedLostReportForMatchId = null;
+let lostReportOptionsRequest = 0;
 let selectedCloseReportId = null;
 let selectedCloseReportType = null;
 
@@ -136,6 +138,7 @@ function enterApp(user) {
 
 function navigate(view) {
   if (!currentUser) return;
+  if (view !== "my-reports") selectedLostReportForMatchId = null;
   if (view === "office" && currentUser.role !== "office") view = "browse";
   if (currentUser.role === "office" && ["report", "my-reports", "my-claims", "activity"].includes(view)) view = "office";
   const sections = {
@@ -318,6 +321,7 @@ async function loadMyReports() {
 }
 
 async function loadMatches(reportId) {
+  selectedLostReportForMatchId = reportId;
   $("#matchesPanel").classList.remove("hidden");
   $("#matchResults").innerHTML = '<div class="list-card"><p>Comparing report details…</p></div>';
   try {
@@ -357,9 +361,15 @@ async function loadMyClaims() {
       const appealNote = claim.appeal_note
         ? '<div class="claim-appeal-note"><strong>Your review request</strong><p>' + escapeHTML(claim.appeal_note) + '</p></div>'
         : "";
+      const linkedLost = claim.linked_lost_report
+        ? '<div class="linked-report-line"><strong>Linked lost report</strong><span>' +
+          escapeHTML(claim.linked_lost_report.title + " · " + claim.linked_lost_report.public_ref) +
+          '</span><span class="' + statusClass(claim.linked_lost_report.status) + '">' +
+          escapeHTML(statusLabel(claim.linked_lost_report.status)) + '</span></div>'
+        : "";
       return '<article class="list-card" data-claim-card="' + escapeHTML(claim.id) + '"><div class="list-card-head"><div><h3>' + escapeHTML(claim.report.title) + '</h3><p>' +
         escapeHTML(claim.report.public_ref + " · Submitted " + humanDate(claim.created_at)) + "</p></div><span class=\"" + statusClass(claim.status) + "\">" +
-        escapeHTML(statusLabel(claim.status)) + "</span></div><p>" + escapeHTML(guidance) + '</p>' + appealNote + '<div class="list-card-meta"><span>⌖ ' +
+        escapeHTML(statusLabel(claim.status)) + "</span></div><p>" + escapeHTML(guidance) + '</p>' + appealNote + linkedLost + '<div class="list-card-meta"><span>⌖ ' +
         escapeHTML(claim.report.location) + "</span><span>Reference " + escapeHTML(claim.report.public_ref) + "</span></div><div class=\"card-actions\">" +
         addEvidence + "</div>" + disputeForm + "</article>";
     }).join("");
@@ -398,7 +408,40 @@ function showClaimDialog(report) {
   $("#claimItemSummary").innerHTML = "<strong>" + escapeHTML(report.title) + " · " + escapeHTML(report.public_ref) +
     "</strong><small>" + escapeHTML(categoryLabel(report.category)) + " · " + escapeHTML(report.location) + "</small>";
   $("#claimEvidence").value = "";
+  const preferredLostReportId = selectedLostReportForMatchId;
+  selectedLostReportForMatchId = null;
+  $("#claimSubmitButton").disabled = true;
   $("#claimDialog").showModal();
+  loadClaimLostReports(preferredLostReportId);
+}
+
+async function loadClaimLostReports(preferredReportId) {
+  const select = $("#claimLostReport");
+  const requestId = ++lostReportOptionsRequest;
+  select.disabled = true;
+  select.innerHTML = '<option value="">Loading your open lost reports…</option>';
+  try {
+    const data = await api("/api/reports?mine=true&report_type=lost");
+    if (requestId !== lostReportOptionsRequest) return;
+    const openReports = data.reports.filter((item) => item.report_type === "lost" && item.status === "open");
+    select.innerHTML = '<option value="">No linked lost report</option>' + openReports.map((item) =>
+      '<option value="' + escapeHTML(item.id) + '">' + escapeHTML(item.title + " · " + item.public_ref + " · " + humanDate(item.occurred_at)) + '</option>'
+    ).join("");
+    if (preferredReportId && openReports.some((item) => item.id === preferredReportId)) {
+      select.value = preferredReportId;
+    }
+    if (!openReports.length) {
+      select.innerHTML = '<option value="">No open lost reports to link</option>';
+    }
+    select.disabled = false;
+    $("#claimSubmitButton").disabled = false;
+  } catch (error) {
+    if (requestId !== lostReportOptionsRequest) return;
+    select.innerHTML = '<option value="">Continue without linking a lost report</option>';
+    select.disabled = false;
+    $("#claimSubmitButton").disabled = false;
+    showToast("Could not load your open lost reports. You can still submit the claim without linking one.", true);
+  }
 }
 
 async function submitClaim(event) {
@@ -408,7 +451,11 @@ async function submitClaim(event) {
   try {
     const result = await api("/api/claims", {
       method: "POST",
-      body: { report_id: selectedClaimReport.id, evidence: $("#claimEvidence").value.trim() }
+      body: {
+        report_id: selectedClaimReport.id,
+        lost_report_id: $("#claimLostReport").value || null,
+        evidence: $("#claimEvidence").value.trim()
+      }
     });
     $("#claimDialog").close();
     showToast(result.message + " Your evidence is private.", false);
