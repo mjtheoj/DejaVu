@@ -77,3 +77,10 @@ SQLite and local file storage are suitable for prototype evaluation, not a claim
 The recommended demo starts one server in the current terminal and opens `http://127.0.0.1:8000`. It uses `data/lostlink.db` for student and office operations. Use the header's **Switch to office** / **Switch to student** button to change roles in the same browser session; revisit the target tab after switching to fetch the latest records. Stop older two-portal servers before launch and stop the demo with `Ctrl+C`.
 
 Demo-only accounts:
+
+| Role | Email | Password |
+|---|---|---|
+| Student | `student@lostlink.local` | `student123` |
+| Office staff | `office@lostlink.local` | `office123` |
+
+Use the in-app switcher to move between these roles against the same local database. These are local demo credentials only. Do not expose the demo server to the public internet.
