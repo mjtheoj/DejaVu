@@ -6,6 +6,8 @@ let appConfig = null;
 let selectedClaimReport = null;
 let selectedLostReportForMatchId = null;
 let lostReportOptionsRequest = 0;
+let reportSubmitting = false;
+let claimSubmitting = false;
 let selectedCloseReportId = null;
 let selectedCloseReportType = null;
 
@@ -256,6 +258,10 @@ async function submitReport(event) {
     $("#reportArea").focus();
     return;
   }
+  if (reportSubmitting) return;
+  reportSubmitting = true;
+  const submitButton = $('#reportForm button[type="submit"]');
+  submitButton.disabled = true;
   try {
     const result = await api("/api/reports", { method: "POST", body });
     let successMessage = result.message;
@@ -278,6 +284,9 @@ async function submitReport(event) {
     showToast(successMessage, photoFailed);
   } catch (error) {
     $("#reportError").textContent = error.message;
+  } finally {
+    reportSubmitting = false;
+    submitButton.disabled = false;
   }
 }
 
@@ -448,8 +457,10 @@ async function loadClaimLostReports(preferredReportId) {
 
 async function submitClaim(event) {
   event.preventDefault();
-  if (!selectedClaimReport) return;
+  if (!selectedClaimReport || claimSubmitting) return;
   $("#claimError").textContent = "";
+  claimSubmitting = true;
+  $("#claimSubmitButton").disabled = true;
   try {
     const result = await api("/api/claims", {
       method: "POST",
@@ -464,6 +475,9 @@ async function submitClaim(event) {
     navigate("my-claims");
   } catch (error) {
     $("#claimError").textContent = error.message;
+  } finally {
+    claimSubmitting = false;
+    $("#claimSubmitButton").disabled = false;
   }
 }
 
