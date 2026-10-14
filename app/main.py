@@ -159,6 +159,7 @@ def initialise_db() -> None:
             CREATE TABLE IF NOT EXISTS claims (
                 id TEXT PRIMARY KEY,
                 report_id TEXT NOT NULL REFERENCES reports(id),
+                lost_report_id TEXT REFERENCES reports(id),
                 claimant_id INTEGER NOT NULL REFERENCES users(id),
                 evidence TEXT NOT NULL,
                 status TEXT NOT NULL,
@@ -257,6 +258,7 @@ def initialise_db() -> None:
         for column, declaration in (
             ("appeal_note", "TEXT"),
             ("appeal_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("lost_report_id", "TEXT REFERENCES reports(id)"),
         ):
             if column not in claim_columns:
                 conn.execute(f"ALTER TABLE claims ADD COLUMN {column} {declaration}")
@@ -746,6 +748,7 @@ class StorageLocationBody(BaseModel):
 class ClaimBody(BaseModel):
     report_id: str
     evidence: str = Field(min_length=20, max_length=1800)
+    lost_report_id: str | None = None
 
 
 class ClaimEvidenceBody(BaseModel):
@@ -927,6 +930,16 @@ async def close_report(
         if report["created_by"] != user["id"]:
             raise HTTPException(status_code=404, detail="Report not found.")
         if report["report_type"] == "lost" and report["status"] == "open":
+            linked_active_claim = conn.execute(
+                """SELECT 1 FROM claims WHERE lost_report_id=?
+                   AND status IN ('pending','disputed','needs_more_evidence','approved_for_collection') LIMIT 1""",
+                (report_id,),
+            ).fetchone()
+            if linked_active_claim:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This lost report is linked to a claim under review. Resolve that claim before closing the report."
+                )
             if body.reason == "found_report_withdrawn":
                 raise HTTPException(status_code=422, detail="Choose a reason for closing your lost-item search.")
             final_status = "closed"
@@ -1145,6 +1158,26 @@ async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authentic
         report = read_report(conn, body.report_id)
         if report["report_type"] != "found" or report["status"] != "available":
             raise HTTPException(status_code=409, detail="This item is not accepting claims.")
+        linked_lost = None
+        if body.lost_report_id:
+            linked_lost = read_report(conn, body.lost_report_id)
+            if (linked_lost["report_type"] != "lost" or
+                    linked_lost["created_by"] != user["id"] or
+                    linked_lost["status"] != "open"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Choose one of your own open lost reports to link this claim, or leave the link blank."
+                )
+            existing_linked = conn.execute(
+                """SELECT id FROM claims WHERE lost_report_id=?
+                   AND status IN ('pending','disputed','needs_more_evidence','approved_for_collection')""",
+                (body.lost_report_id,),
+            ).fetchone()
+            if existing_linked:
+                raise HTTPException(
+                    status_code=409,
+                    detail="That lost report is already linked to a claim under review. Resolve it before starting another claim for the same lost report."
+                )
         if report["created_by"] == user["id"]:
             raise HTTPException(status_code=400, detail="You cannot claim your own found-item report.")
         existing_own = conn.execute(
@@ -1166,9 +1199,9 @@ async def create_claim(body: ClaimBody, user: dict[str, Any] = Depends(authentic
         claim_id = uuid.uuid4().hex
         timestamp = now_iso()
         conn.execute(
-            """INSERT INTO claims(id, report_id, claimant_id, evidence, status, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (claim_id, body.report_id, user["id"], body.evidence.strip(), status, timestamp, timestamp),
+            """INSERT INTO claims(id, report_id, lost_report_id, claimant_id, evidence, status, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (claim_id, body.report_id, body.lost_report_id, user["id"], body.evidence.strip(), status, timestamp, timestamp),
         )
         if active:
             conn.execute(
@@ -1214,6 +1247,15 @@ async def list_claims(user: dict[str, Any] = Depends(authenticated_user)):
         output = []
         for claim in rows:
             report = read_report(conn, claim["report_id"])
+            linked_lost_report = None
+            if claim["lost_report_id"]:
+                linked_row = read_report(conn, claim["lost_report_id"])
+                linked_lost_report = {
+                    "id": linked_row["id"],
+                    "public_ref": linked_row["public_ref"],
+                    "title": linked_row["title"],
+                    "status": linked_row["status"],
+                }
             entry = {
                 "id": claim["id"],
                 "status": claim["status"],
@@ -1221,6 +1263,7 @@ async def list_claims(user: dict[str, Any] = Depends(authenticated_user)):
                 "updated_at": claim["updated_at"],
                 "appeal_note": claim["appeal_note"],
                 "appeal_count": claim["appeal_count"],
+                "linked_lost_report": linked_lost_report,
                 "report": serialise_report(report, internal=internal),
             }
             if internal:
@@ -1428,6 +1471,24 @@ async def record_handover(
         conn.execute("UPDATE claims SET status='returned', reviewer_id=?, updated_at=? WHERE id=?",
                      (user["id"], timestamp, claim_id))
         conn.execute("UPDATE reports SET status='returned', updated_at=? WHERE id=?", (timestamp, report["id"]))
+        if claim["lost_report_id"]:
+            linked_lost = read_report(conn, claim["lost_report_id"])
+            if linked_lost["status"] == "open":
+                conn.execute(
+                    """UPDATE reports SET status='closed', closure_reason=?, closure_note=?, updated_at=? WHERE id=?""",
+                    ("recovered_through_verified_return",
+                     "Closed automatically after verified handover of " + report["public_ref"] + ".",
+                     timestamp, linked_lost["id"]),
+                )
+                audit(conn, user["id"], "linked_lost_report_closed_after_return", "report", linked_lost["id"],
+                      {"claim_id": claim_id, "found_report_id": report["id"], "tag_id": report["tag_id"]})
+                notify_user(
+                    conn, claim["claimant_id"], "linked-lost-report-closed:" + linked_lost["id"],
+                    "Lost report resolved",
+                    "Your linked lost report " + linked_lost["public_ref"] +
+                    " was closed automatically after the verified physical handover.",
+                    "report", linked_lost["id"],
+                )
         audit(conn, user["id"], "physical_handover_recorded", "claim", claim_id,
               {"report_id": report["id"], "tag_id": report["tag_id"]})
         award_points(
