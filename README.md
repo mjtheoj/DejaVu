@@ -1,5 +1,10 @@
 # LostLink — Campus Lost-and-Found Workflow
 
+[![MiniLM-L6-v2](https://img.shields.io/badge/Embeddings-all--MiniLM--L6--v2-6f42c1)](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2?utm_source=chatgpt.com)
+[![React](https://img.shields.io/badge/React-19.0-61DAFB?logo=react)](https://react.dev/)
+[![FastAPi](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://fastapi.tiangolo.com/)
+[![CLIP](https://shields.io)](https://huggingface.co/openai/clip-vit-base-patch32?utm_source=chatgpt.com)
+
 LostLink is a web application for managing campus lost property from initial report through verified physical return. Students submit lost or found reports and receive possible-match suggestions. Authorised office staff manage physical intake, item tagging and storage, private ownership-claim review, disputes and recorded handover.
 
 **The central rule is that a match is a lead, not proof of ownership.** A found item becomes visible for student discovery only after authorised staff confirm physical receipt and record custody. Claim approval and physical handover are separate steps; the application requires the exact physical LostLink Tag ID and identity/handover confirmations before recording a return.
