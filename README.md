@@ -1,5 +1,15 @@
 # LostLink — Campus Lost-and-Found Workflow
 
+A campus lost-and-found platform with intelligent item matching and verified physical handover.
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![MiniLM](https://img.shields.io/badge/MiniLM-L6--v2-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
+[![CLIP](https://img.shields.io/badge/CLIP-ViT--B%2F32-412991?logo=openai&logoColor=white)](https://huggingface.co/openai/clip-vit-base-patch32)
+[![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+
+<img width="958" height="479" alt="image" src="https://github.com/user-attachments/assets/7ec20fbf-7df0-4c68-9b04-0ba9badf81d5" />
+
 LostLink is a web application for managing campus lost property from initial report through verified physical return. Students submit lost or found reports and receive possible-match suggestions. Authorised office staff manage physical intake, item tagging and storage, private ownership-claim review, disputes and recorded handover.
 
 **The central rule is that a match is a lead, not proof of ownership.** A found item becomes visible for student discovery only after authorised staff confirm physical receipt and record custody. Claim approval and physical handover are separate steps; the application requires the exact physical LostLink Tag ID and identity/handover confirmations before recording a return.
@@ -378,6 +388,12 @@ This is a route overview, not a replacement for endpoint schema validation. The 
 | Frontend | HTML, CSS and vanilla JavaScript | Student and office workflows. |
 | Testing and CI | Python unittest, Node.js syntax check and GitHub Actions | Workflow, matching, rewards, frontend contract and import checks. |
 
+## Prerequisites
+
+- Python 3.11 (tested in CI)
+- Git
+- A terminal with PowerShell on Windows, or a shell on Linux/macOS
+
 ## Local installation
 
 The documented launcher is for Windows PowerShell. Python 3.11 is used in CI.
@@ -395,7 +411,9 @@ Run these commands from the repository root.
 
 2. Create the local environment file if it does not already exist.
 
-       Copy-Item .env.example .env
+       if (-not (Test-Path .env)) {
+           Copy-Item .env.example .env
+       }
 
    If you already have a local <code>.env</code>, keep it rather than overwriting it.
 
@@ -419,7 +437,7 @@ Create and activate a virtual environment, install dependencies, create the envi
        source .venv/bin/activate
        python -m pip install --upgrade pip
        python -m pip install -r requirements.txt
-       cp .env.example .env
+       [ -f .env ] || cp .env.example .env
        python -c "import secrets; print(secrets.token_urlsafe(48))"
        python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
